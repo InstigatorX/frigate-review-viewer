@@ -80,7 +80,7 @@ def main():
                 if not thumb_rel.startswith("/"):
                     thumb_rel = "/" + thumb_rel
 
-                thumb_url = f"https://nvr.loebees.com:8971{thumb_rel}"
+                thumb_url = f"https://192.168.86.244:8971{thumb_rel}"
             else:
                 # fallback: construct thumbnail path without random suffix
                 thumb_url = (
