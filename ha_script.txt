@@ -1,0 +1,16 @@
+alias: GenAI - Collect last 30 days events
+description: ""
+sequence:
+  - repeat:
+      count: 30
+      sequence:
+        - variables:
+            offset: "{{ repeat.index - 1 }}"
+            ydate: "{{ (now() - timedelta(days=offset)).date() }}"
+            start: "{{ as_timestamp(ydate) | int }}"
+            end: "{{ start + 86399 }}"
+        - action: shell_command.build_frigate_day_log
+          data:
+            ydate: "{{ ydate }}"
+            start: "{{ start }}"
+            end: "{{ end }}"
