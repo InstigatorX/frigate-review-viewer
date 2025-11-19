@@ -1,0 +1,43 @@
+alias: GenAI - Collect current day events
+description: Build Frigate yesterday log file (raw list API)
+triggers:
+  - trigger: webhook
+    allowed_methods:
+      - POST
+      - PUT
+    local_only: true
+    webhook_id: frigate_genai_log
+conditions: []
+actions:
+  - variables:
+      ydate: "{{ (now() - timedelta(days=0)).date() }}"
+      start: "{{ as_timestamp((now() - timedelta(days=0)).date()) | int }}"
+      end: "{{ (as_timestamp((now() - timedelta(days=0)).date()) | int) + 86399 }}"
+  - data:
+      ydate: "{{ ydate }}"
+      start: "{{ start }}"
+      end: "{{ end }}"
+    action: shell_command.build_frigate_day_log
+mode: single
+
+alias: Grab prior day events
+description: Build Frigate yesterday log file (raw list API)
+triggers:
+  - at: "00:10:00"
+    trigger: time
+actions:
+  - variables:
+      ydate: "{{ (now() - timedelta(days=1)).date() }}"
+      start: "{{ as_timestamp((now() - timedelta(days=1)).date()) | int }}"
+      end: "{{ (as_timestamp((now() - timedelta(days=1)).date()) | int) + 86399 }}"
+  - data:
+      ydate: "{{ ydate }}"
+      start: "{{ start }}"
+      end: "{{ end }}"
+    action: shell_command.build_frigate_day_log
+  - action: shell_command.build_frigate_ai_summary
+    metadata: {}
+    data:
+      start: "{{ start }}"
+      end: "{{ end }}"
+mode: single
