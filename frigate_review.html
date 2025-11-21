@@ -37,14 +37,20 @@
 
     .controls {
       display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      align-items: center;
+      flex-direction: column;
+      gap: 0.5rem;
       margin-bottom: 1rem;
       padding: 0.75rem 0.9rem;
       border-radius: 0.9rem;
       background: rgba(15,23,42,0.9);
       border: 1px solid #1f2937;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
     }
 
     label {
@@ -144,11 +150,28 @@
       aspect-ratio: 16 / 9;
     }
 
+    .thumb-wrapper[data-video-url] {
+      cursor: pointer;
+    }
+
     .thumb-wrapper img {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    .thumb-wrapper[data-video-url]:hover img {
+      transform: scale(1.02);
+      filter: brightness(1.05);
+    }
+
+    .thumb-wrapper video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #000;
     }
 
     .chip-row {
@@ -190,33 +213,6 @@
       color: #9ca3af;
     }
 
-    .card-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 0.4rem;
-      gap: 0.5rem;
-    }
-
-    .btn-video, .btn-preview {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0.35rem 0.8rem;
-      border-radius: 999px;
-      border: 1px solid #38bdf8;
-      color: #e0f2fe;
-      background: linear-gradient(135deg, #0ea5e9, #0369a1);
-      font-size: 0.8rem;
-      text-decoration: none;
-    }
-
-    .btn-preview {
-      border-color: #4b5563;
-      background: #020617;
-      color: #9ca3af;
-    }
-
     .empty-message {
       font-size: 0.9rem;
       color: #9ca3af;
@@ -239,23 +235,28 @@
     }
 
     @media (max-width: 700px) {
-      .controls {
+      .controls-row {
         flex-direction: column;
         align-items: flex-start;
       }
+
       .status {
         margin-left: 0;
         text-align: left;
       }
+
       .page {
         padding: 1rem;
       }
+
       h1 {
         font-size: 1.4rem;
       }
+
       .pagination {
         justify-content: center;
       }
+
       .quick-ranges {
         width: 100%;
         justify-content: flex-start;
@@ -263,6 +264,8 @@
       }
     }
   </style>
+  <!-- HLS.js for inline HLS playback -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
 <div class="page">
@@ -272,47 +275,53 @@
   </div>
 
   <div class="controls">
-    <label for="logDate">Log date:</label>
-    <input type="date" id="logDate" />
+    <!-- Row 1: date picker, quick ranges, status -->
+    <div class="controls-row">
+      <label for="logDate">Log date:</label>
+      <input type="date" id="logDate" />
 
-    <div class="quick-ranges">
-      <span class="quick-ranges-label">Quick range:</span>
-      <button id="btnToday" class="btn-secondary" type="button">Today</button>
-      <button id="btnYesterday" class="btn-secondary" type="button">Yesterday</button>
-      <button id="btn7Days" class="btn-secondary" type="button">Last 7 days</button>
+      <div class="quick-ranges">
+        <span class="quick-ranges-label">Quick range:</span>
+        <button id="btnToday" class="btn-secondary" type="button">Today</button>
+        <button id="btnYesterday" class="btn-secondary" type="button">Yesterday</button>
+        <button id="btn7Days" class="btn-secondary" type="button">Last 7 days</button>
+      </div>
+
+      <div id="statusText" class="status">Idle</div>
     </div>
 
-    <label for="cameraFilter">Camera:</label>
-    <select id="cameraFilter">
-      <option value="all">All Cameras</option>
-    </select>
+    <!-- Row 2: camera, threat level, severity, objects, per page -->
+    <div class="controls-row">
+      <label for="cameraFilter">Camera:</label>
+      <select id="cameraFilter">
+        <option value="all">All Cameras</option>
+      </select>
 
-    <label for="threatFilter">Min Threat Level:</label>
-    <select id="threatFilter">
-      <option value="all">All</option>
-      <option value="0">0 – Low+</option>
-      <option value="1">1 – Medium+</option>
-      <option value="2">2 – High only</option>
-    </select>
+      <label for="threatFilter">Min Threat Level:</label>
+      <select id="threatFilter">
+        <option value="all">All</option>
+        <option value="0">0 – Low+</option>
+        <option value="1">1 – Medium+</option>
+        <option value="2">2 – High only</option>
+      </select>
 
-    <label for="eventSeverityFilter">Event Severity:</label>
-    <select id="eventSeverityFilter">
-      <option value="all">All Severities</option>
-    </select>
+      <label for="eventSeverityFilter">Event Severity:</label>
+      <select id="eventSeverityFilter">
+        <option value="all">All Severities</option>
+      </select>
 
-    <label for="objectsFilter">Objects:</label>
-    <select id="objectsFilter">
-      <option value="all">All Objects</option>
-    </select>
+      <label for="objectsFilter">Objects:</label>
+      <select id="objectsFilter">
+        <option value="all">All Objects</option>
+      </select>
 
-    <label for="pageSizeSelect">Per page:</label>
-    <select id="pageSizeSelect">
-      <option value="12">12</option>
-      <option value="24">24</option>
-      <option value="48">48</option>
-    </select>
-
-    <div id="statusText" class="status">Idle</div>
+      <label for="pageSizeSelect">Per page:</label>
+      <select id="pageSizeSelect">
+        <option value="12">12</option>
+        <option value="24">24</option>
+        <option value="48">48</option>
+      </select>
+    </div>
   </div>
 
   <div id="eventsContainer" class="grid"></div>
@@ -402,6 +411,20 @@
     return `${map[day]||day}, ${parts.slice(1).join(",").trim()}`;
   }
 
+  // Normalize VOD URLs to HTTPS reverse proxy for Safari / mixed-content safety
+  function normalizeVideoUrl(url) {
+    try {
+      const u = new URL(url);
+      if (u.pathname.startsWith("/vod/")) {
+        return "https://nvr.loebees.com:8971" + u.pathname;
+      }
+      return url;
+    } catch (e) {
+      console.warn("Could not normalize video URL:", url, e);
+      return url;
+    }
+  }
+
   function parseLogContent(raw) {
     let lines = raw.split("\n").map(l => l.trim());
     if (lines.length >= 2) lines = lines.slice(2);
@@ -472,7 +495,7 @@
         const link = parseMarkdownLink(ls[i]);
         if (link) {
           title = link.text;
-          videoUrl = link.url;
+          videoUrl = normalizeVideoUrl(link.url);
           break;
         }
       }
@@ -493,13 +516,13 @@
         if (img) { thumbUrl = img.url; break; }
       }
 
-      // Video/Preview
+      // Video/Preview line (usually last)
       const last = ls[ls.length-1];
       const links = [...last.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)];
       for (const l of links) {
         const label = l[1].toLowerCase();
         const url = l[2];
-        if (label.includes("video")) videoUrl = url;
+        if (label.includes("video"))  videoUrl   = normalizeVideoUrl(url);
         if (label.includes("preview")) previewUrl = url;
       }
 
@@ -563,6 +586,46 @@
     return res;
   }
 
+  function setupThumbnailClickHandlers() {
+    const wrappers = document.querySelectorAll(".thumb-wrapper[data-video-url]");
+    wrappers.forEach(wrapper => {
+      const url = wrapper.dataset.videoUrl;
+      if (!url) return;
+
+      wrapper.addEventListener("click", () => {
+        // If a video already exists, toggle play/pause
+        const existingVideo = wrapper.querySelector("video");
+        if (existingVideo) {
+          if (existingVideo.paused) existingVideo.play();
+          else existingVideo.pause();
+          return;
+        }
+
+        wrapper.innerHTML = "";
+        const video = document.createElement("video");
+        video.controls = true;
+        video.autoplay = true;
+        video.playsInline = true;
+
+        video.addEventListener("error", (e) => {
+          console.error("Video playback error for", url, e, video.error);
+        });
+
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = url;
+        } else if (window.Hls && window.Hls.isSupported()) {
+          const hls = new Hls();
+          hls.loadSource(url);
+          hls.attachMedia(video);
+        } else {
+          video.src = url;
+        }
+
+        wrapper.appendChild(video);
+      });
+    });
+  }
+
   function renderCards(events) {
     eventsContainer.innerHTML = "";
     emptyMessage.textContent = "";
@@ -580,11 +643,17 @@
         ? `<div class="objects">Objects: ${ev.objectsList.join(", ")}</div>`
         : "";
 
+      const wrapperAttrs = ev.videoUrl ? ` data-video-url="${ev.videoUrl}"` : "";
+      const thumbInner = ev.thumbUrl
+        ? `<img src="${ev.thumbUrl}" title="${ev.scene.replace(/"/g,'&quot;')}">`
+        : "";
+
+      const thumbBlock = thumbInner.trim()
+        ? `<div class="thumb-wrapper"${wrapperAttrs}>${thumbInner}</div>`
+        : "";
+
       card.innerHTML = `
-        ${ev.thumbUrl ? `
-        <div class="thumb-wrapper">
-          <img src="${ev.thumbUrl}" title="${ev.scene.replace(/"/g,'&quot;')}">
-        </div>` : ""}
+        ${thumbBlock}
 
         <div class="chip-row">
           <span class="chip">${ev.camera}</span>
@@ -594,17 +663,12 @@
         <div class="title">${ev.title}</div>
         <div class="scene">${ev.scene}</div>
         ${objectsDisplay}
-
-        <div class="card-footer">
-          <div>
-            ${ev.videoUrl ? `<a class="btn-video" href="${ev.videoUrl}" target="_blank">▶ Video</a>` : ""}
-            ${ev.previewUrl ? `<a class="btn-preview" href="${ev.previewUrl}" target="_blank">Preview</a>` : ""}
-          </div>
-        </div>
       `;
 
       eventsContainer.appendChild(card);
     }
+
+    setupThumbnailClickHandlers();
   }
 
   function renderPage() {
@@ -675,14 +739,13 @@
         } else {
           const fileName = getLogFileName(dateStr);
           const res = await fetch(fileName + "?" + Date.now());
-          if (!res.ok) continue; // skip missing days
+          if (!res.ok) continue;
           const raw = await res.text();
           const events = parseLogContent(raw);
           allEvents.push(...events);
           filesLoaded++;
         }
       } catch (e) {
-        // skip days that fail to load/parse
         console.warn("Failed to load log for", dateStr, e);
       }
     }
