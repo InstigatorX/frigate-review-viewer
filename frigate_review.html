@@ -416,7 +416,7 @@
     try {
       const u = new URL(url);
       if (u.pathname.startsWith("/vod/")) {
-        return "https://nvr.loebees.com:8971" + u.pathname;
+        return "https://192.168.86.243" + u.pathname; // change this to the server you want to pull recording from
       }
       return url;
     } catch (e) {
