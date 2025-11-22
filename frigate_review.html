@@ -411,19 +411,27 @@
     return `${map[day]||day}, ${parts.slice(1).join(",").trim()}`;
   }
 
-  // Normalize VOD URLs to HTTPS reverse proxy for Safari / mixed-content safety
-  function normalizeVideoUrl(url) {
-    try {
-      const u = new URL(url);
-      if (u.pathname.startsWith("/vod/")) {
-        return "https://192.168.86.243" + u.pathname; // change this to the server you want to pull recording from
-      }
-      return url;
-    } catch (e) {
-      console.warn("Could not normalize video URL:", url, e);
-      return url;
+  // Normalize VOD URLs but keep the server from the Video tag itself
+function normalizeVideoUrl(url) {
+  try {
+    const u = new URL(url);
+
+    // Keep whatever host:port the markdown provides,
+    // but prefer https if the source is http (and server supports it).
+    if (u.protocol === "http:") {
+      u.protocol = "https:";
     }
+
+    // You could also strip query/fragment if you ever add them:
+    // u.search = "";
+    // u.hash = "";
+
+    return u.toString();
+  } catch (e) {
+    console.warn("Could not normalize video URL:", url, e);
+    return url;
   }
+}
 
   function parseLogContent(raw) {
     let lines = raw.split("\n").map(l => l.trim());
