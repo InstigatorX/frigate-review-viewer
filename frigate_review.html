@@ -30,7 +30,7 @@
     }
 
     .subtitle {
-      margin-bottom: 1.25rem;
+      margin-bottom: 0.75rem;
       color: #9ca3af;
       font-size: 0.95rem;
     }
@@ -51,6 +51,10 @@
       flex-wrap: wrap;
       gap: 0.75rem;
       align-items: center;
+    }
+
+    .row-spacer {
+      flex: 1 1 auto;
     }
 
     label {
@@ -234,7 +238,7 @@
       text-align: center;
     }
 
-    @media (max-width: 700px) {
+    @media (max-width: 900px) {
       .controls-row {
         flex-direction: column;
         align-items: flex-start;
@@ -275,7 +279,7 @@
   </div>
 
   <div class="controls">
-    <!-- Row 1: date picker, quick ranges, status -->
+    <!-- Row 1: date picker, quick ranges, VOD host selector, status -->
     <div class="controls-row">
       <label for="logDate">Log date:</label>
       <input type="date" id="logDate" />
@@ -286,6 +290,11 @@
         <button id="btnYesterday" class="btn-secondary" type="button">Yesterday</button>
         <button id="btn7Days" class="btn-secondary" type="button">Last 7 days</button>
       </div>
+
+      <div class="row-spacer"></div>
+
+      <label for="vodHostSelect">VOD host:</label>
+      <select id="vodHostSelect"></select>
 
       <div id="statusText" class="status">Idle</div>
     </div>
@@ -350,12 +359,38 @@
   const btnToday            = document.getElementById("btnToday");
   const btnYesterday        = document.getElementById("btnYesterday");
   const btn7Days            = document.getElementById("btn7Days");
+  const vodHostSelect       = document.getElementById("vodHostSelect");
+
+  // ─────────────────────────────────────────────
+  // NVR CONFIG – change hostnames here once
+  // ─────────────────────────────────────────────
+  const NVR = {
+    LOCAL:  "PRIMARY_SERVER",
+    REMOTE: "SECONDARY_SERVER",
+    autoVodHost() {
+      // Default for "auto" mode
+      return this.REMOTE;
+    }
+  };
 
   let lastEvents = [];
   let currentPage = 1;
   let pageSize = parseInt(pageSizeSelect.value, 10) || 12;
   // rangeMode: "single" or "7days"
   let rangeMode = "single";
+  // selected VOD host: "auto", NVR.LOCAL, NVR.REMOTE
+  let selectedVodHost = "auto";
+
+  function initVodHostSelect() {
+    if (!vodHostSelect) return;
+    vodHostSelect.innerHTML = `
+      <option value="auto">Auto (prefer ${NVR.REMOTE})</option>
+      <option value="${NVR.REMOTE}">${NVR.REMOTE}</option>
+      <option value="${NVR.LOCAL}">${NVR.LOCAL}</option>
+    `;
+    vodHostSelect.value = "auto";
+    selectedVodHost = vodHostSelect.value;
+  }
 
   function getTodayString() {
     const t = new Date();
@@ -368,6 +403,16 @@
   function getOffsetDateString(offsetDays) {
     const t = new Date();
     t.setDate(t.getDate() + offsetDays);
+    const y = t.getFullYear();
+    const m = String(t.getMonth() + 1).padStart(2, "0");
+    const d = String(t.getDate() + 0).padStart(2, "0");
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  }
+
+  // (Fix minor bug in previous version)
+  function getOffsetDateString(offset) {
+    const t = new Date();
+    t.setDate(t.getDate() + offset);
     const y = t.getFullYear();
     const m = String(t.getMonth() + 1).padStart(2, "0");
     const d = String(t.getDate()).padStart(2, "0");
@@ -411,27 +456,40 @@
     return `${map[day]||day}, ${parts.slice(1).join(",").trim()}`;
   }
 
-  // Normalize VOD URLs but keep the server from the Video tag itself
-function normalizeVideoUrl(url) {
-  try {
-    const u = new URL(url);
+  // Normalize VOD URLs based on VOD host selection (no login, just host mapping)
+  function normalizeVideoUrl(url) {
+    try {
+      const u = new URL(url);
 
-    // Keep whatever host:port the markdown provides,
-    // but prefer https if the source is http (and server supports it).
-    if (u.protocol === "http:") {
-      u.protocol = "https:";
+      const isNvrHost =
+        u.hostname === NVR.LOCAL ||
+        u.hostname === NVR.REMOTE;
+
+      // Already an NVR host
+      if (isNvrHost) {
+        if (selectedVodHost !== "auto") {
+          u.hostname = selectedVodHost;
+          return u.toString();
+        }
+        return url; // auto = keep original NVR host
+      }
+
+      // If it exposes /vod/, map to selected or default remote
+      if (u.pathname.startsWith("/vod/")) {
+        const host =
+          selectedVodHost !== "auto"
+            ? selectedVodHost
+            : NVR.autoVodHost();
+
+        return `https://${host}${u.pathname}`;
+      }
+
+      return url;
+    } catch (e) {
+      console.warn("Could not normalize video URL:", url, e);
+      return url;
     }
-
-    // You could also strip query/fragment if you ever add them:
-    // u.search = "";
-    // u.hash = "";
-
-    return u.toString();
-  } catch (e) {
-    console.warn("Could not normalize video URL:", url, e);
-    return url;
   }
-}
 
   function parseLogContent(raw) {
     let lines = raw.split("\n").map(l => l.trim());
@@ -445,7 +503,7 @@ function normalizeVideoUrl(url) {
 
       let index=null, time="", camera="";
       let threat=0, eventSeverity="", objectsList=[];
-      let title="", scene="", thumbUrl="", videoUrl="", previewUrl="";
+      let title="", scene="", thumbUrl="", videoUrlRaw="", previewUrl="";
 
       // Header line: "49.   Tuesday, 10:52 AM - front_door"
       const header = ls[0];
@@ -503,7 +561,7 @@ function normalizeVideoUrl(url) {
         const link = parseMarkdownLink(ls[i]);
         if (link) {
           title = link.text;
-          videoUrl = normalizeVideoUrl(link.url);
+          videoUrlRaw = link.url;
           break;
         }
       }
@@ -530,13 +588,13 @@ function normalizeVideoUrl(url) {
       for (const l of links) {
         const label = l[1].toLowerCase();
         const url = l[2];
-        if (label.includes("video"))  videoUrl   = normalizeVideoUrl(url);
+        if (label.includes("video"))  videoUrlRaw = url;
         if (label.includes("preview")) previewUrl = url;
       }
 
       events.push({
         index, time, camera, threat, eventSeverity, objectsList,
-        title, scene, thumbUrl, videoUrl, previewUrl
+        title, scene, thumbUrl, videoUrlRaw, previewUrl
       });
     }
 
@@ -619,14 +677,16 @@ function normalizeVideoUrl(url) {
           console.error("Video playback error for", url, e, video.error);
         });
 
+        const src = normalizeVideoUrl(url);
+
         if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          video.src = url;
+          video.src = src;
         } else if (window.Hls && window.Hls.isSupported()) {
           const hls = new Hls();
-          hls.loadSource(url);
+          hls.loadSource(src);
           hls.attachMedia(video);
         } else {
-          video.src = url;
+          video.src = src;
         }
 
         wrapper.appendChild(video);
@@ -651,7 +711,8 @@ function normalizeVideoUrl(url) {
         ? `<div class="objects">Objects: ${ev.objectsList.join(", ")}</div>`
         : "";
 
-      const wrapperAttrs = ev.videoUrl ? ` data-video-url="${ev.videoUrl}"` : "";
+      const normalizedVideoUrl = ev.videoUrlRaw ? normalizeVideoUrl(ev.videoUrlRaw) : "";
+      const wrapperAttrs = normalizedVideoUrl ? ` data-video-url="${normalizedVideoUrl}"` : "";
       const thumbInner = ev.thumbUrl
         ? `<img src="${ev.thumbUrl}" title="${ev.scene.replace(/"/g,'&quot;')}">`
         : "";
@@ -856,6 +917,11 @@ function normalizeVideoUrl(url) {
     renderPage();
   });
 
+  vodHostSelect.addEventListener("change", () => {
+    selectedVodHost = vodHostSelect.value || "auto";
+    renderPage(); // re-normalize URLs
+  });
+
   prevPageBtn.addEventListener("click", () => {
     if (currentPage > 1) {
       currentPage--;
@@ -868,8 +934,9 @@ function normalizeVideoUrl(url) {
     renderPage();
   });
 
-  // Initial load: today's single-day log
+  // Initial load: init VOD selector + today's single-day log
   window.addEventListener("DOMContentLoaded", () => {
+    initVodHostSelect();
     rangeMode = "single";
     loadLog();
   });
