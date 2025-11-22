@@ -7,7 +7,7 @@ Everything is super simple: a single HTML file sitting in /config/www, a small P
 
 Install
 
-1. Copy the frigate_review.html to the /config/www directory in Home Assistant.
+1. Copy the frigate_review.html to the /config/www directory in Home Assistant. Edit server IP address in normalizeVideoUrl function to point to server you want to pull recording from. In my case, I pull from the secondary (low-quality source) server.
 2. Copy build_frigate_day_log.py to the /config directory. You'll need to edit the API IP addresses to suit your environment. 192.168.86.244 is my primary Frigate where the reviews are pull and 192.168.86.243 is my record-only secondary server.
 3. Import the automations in to HA. 1st one is the webhook that triggers when current day is selected. That way its always most current. 2nd automation does a final pull at 12:10am for the prior days events. This speeds things up versus pulling each day dynamically.
 4. Script is basically a seed for the last 30 days to get things going. Use/modify as needed.
