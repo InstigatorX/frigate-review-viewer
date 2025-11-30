@@ -54,16 +54,16 @@
     .api-status {
       font-size: 0.75rem;
       margin-top: 0.75rem;
-      color: #9ca3af; /* default gray */
+      color: #9ca3af;
       text-align: right;
     }
 
     .api-status.ok {
-      color: #10b981; /* green-500 */
+      color: #10b981;
     }
 
     .api-status.err {
-      color: #ef4444; /* red-500 */
+      color: #ef4444;
     }
 
     .controls {
@@ -194,47 +194,44 @@
       filter: brightness(1.05);
     }
 
-    /* Camera chip overlaid on thumbnail */
     .thumb-camera-chip {
       position: absolute;
       top: 6px;
       left: 6px;
       padding: 0.15rem 0.55rem;
       border-radius: 999px;
-      background: rgba(15,23,42,0.9);
-      border: 1px solid #1f2937;
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(17, 24, 39, 0.5);
       font-size: 0.7rem;
       color: #e5e7eb;
       pointer-events: none;
     }
 
-    /* Detection/Severity/Time chip overlaid bottom-left */
     .thumb-meta-chip {
       position: absolute;
       bottom: 6px;
       left: 6px;
       padding: 0.1rem 0.4rem;
       border-radius: 999px;
-      background: rgba(15,23,42,0.9);
-      border: 1px solid #1f2937;
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(17, 24, 39, 0.5);
       font-size: 0.7rem;
       color: #e5e7eb;
       pointer-events: none;
     }
 
-    /* Threat-based borders */
     .thumb-wrapper.threat-low {
-      border-color: #22c55e; /* green */
+      border-color: #22c55e;
       box-shadow: 0 0 12px rgba(34,197,94,0.4);
     }
 
     .thumb-wrapper.threat-med {
-      border-color: #eab308; /* yellow */
+      border-color: #eab308;
       box-shadow: 0 0 12px rgba(234,179,8,0.4);
     }
 
     .thumb-wrapper.threat-high {
-      border-color: #ef4444; /* red */
+      border-color: #ef4444;
       box-shadow: 0 0 12px rgba(239,68,68,0.4);
     }
 
@@ -328,7 +325,6 @@
       white-space: nowrap;
     }
 
-    /* Mobile-specific tweaks */
     @media (max-width: 900px) {
       .controls-row {
         flex-direction: row;
@@ -358,7 +354,6 @@
     }
 
     @media (max-width: 600px) {
-      /* Force 2 columns on smaller mobile screens */
       .grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -373,7 +368,6 @@
     }
 
     @media (min-width: 901px) {
-      /* On desktop, always show advanced filters and hide toggle button */
       #advancedFilters.collapsed {
         display: block;
       }
@@ -382,7 +376,6 @@
       }
     }
   </style>
-  <!-- HLS.js for inline HLS playback -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
@@ -393,19 +386,14 @@
   </div>
 
   <div class="controls">
-    <!-- Row 1: date only (always visible) + Filters button (mobile) -->
     <div class="controls-row main-controls-row">
       <label for="logDate">Log date:</label>
       <input type="date" id="logDate" />
-
       <div class="row-spacer"></div>
-
       <button id="toggleFilters" class="btn-secondary" type="button">Filters ▾</button>
     </div>
 
-    <!-- Advanced filters: collapsible on mobile -->
     <div id="advancedFilters">
-      <!-- Single row: camera, threat, severity, objects, server -->
       <div class="controls-row">
         <label for="cameraFilter">Camera:</label>
         <select id="cameraFilter">
@@ -458,7 +446,6 @@
     </div>
   </div>
 
-  <!-- API status now at bottom of page -->
   <div id="apiStatus" class="api-status">API: …</div>
 </div>
 
@@ -481,25 +468,21 @@
   const apiStatusEl         = document.getElementById("apiStatus");
   const eventCountBadgeEl   = document.getElementById("eventCountBadge");
 
-  // ─────────────────────────────────────────────
-  // NVR CONFIG – base URLs
-  // Primary = LOCAL_BASE, Secondary = REMOTE_BASE
-  // ─────────────────────────────────────────────
+  const ORIGIN = window.location.origin;
+
   const NVR = {
-    LOCAL_BASE:  "https://primary.domain.com/nvr",        // Primary (thumbs + API + optional VOD)
-    REMOTE_BASE: "https://secondary.domain.com/nvr-remote", // Secondary (VOD)
+    LOCAL_BASE:  ORIGIN + "/nvr",
+    REMOTE_BASE: ORIGIN + "/nvr-remote",
     defaultBase() {
-      return this.REMOTE_BASE; // prefer Secondary by default for VOD
+      return this.REMOTE_BASE;
     }
   };
 
-  // Frigate API is proxied through Primary NVR host over HTTPS
-  const FRIGATE_API_BASE = NVR.LOCAL_BASE; // Primary server for API calls
+  const FRIGATE_API_BASE = NVR.LOCAL_BASE;
 
   let lastEvents = [];
   let currentPage = 1;
   let pageSize = parseInt(pageSizeSelect.value, 10) || 12;
-  // selected VOD server: "primary" (LOCAL_BASE) or "secondary" (REMOTE_BASE)
   let selectedVodServer = "secondary";
 
   function setApiStatus(ok, msg) {
@@ -527,7 +510,7 @@
       <option value="secondary">Secondary</option>
       <option value="primary">Primary</option>
     `;
-    vodHostSelect.value = "secondary";   // default
+    vodHostSelect.value = "secondary";
     selectedVodServer = "secondary";
   }
 
@@ -584,26 +567,21 @@
     return `${map[day]||day}, ${parts.slice(1).join(",").trim()}`;
   }
 
-  // Normalize VOD URLs based on Server selection (base URL mapping)
   function normalizeVideoUrl(url) {
     try {
-      // Accept either full URL or just a /vod/... path
       const vodIndex = url.indexOf("/vod/");
       if (vodIndex === -1) {
-        return url; // not a vod path
+        return url;
       }
-
-      const vodPath = url.substring(vodIndex); // "/vod/..."
-
+      const vodPath = url.substring(vodIndex);
       let base;
       if (selectedVodServer === "primary") {
         base = NVR.LOCAL_BASE;
       } else if (selectedVodServer === "secondary") {
         base = NVR.REMOTE_BASE;
       } else {
-        base = NVR.defaultBase();   // fallback
+        base = NVR.defaultBase();
       }
-
       return base.replace(/\/+$/,"") + vodPath;
     } catch (e) {
       console.warn("Could not normalize video URL:", url, e);
@@ -611,16 +589,12 @@
     }
   }
 
-  // Load events directly from Frigate /api/review via proxied NVR base
   async function loadFromReviewApi(dateStr) {
     const { start, end } = getEpochRangeForDate(dateStr);
-
     const url = FRIGATE_API_BASE.replace(/\/+$/,"") +
                 `/api/review?after=${start}&before=${end}`;
 
-    const res = await fetch(url, {
-      credentials: "include"
-    });
+    const res = await fetch(url);
     if (!res.ok) {
       setApiStatus(false, `HTTP ${res.status}`);
       throw new Error(`Frigate API error: HTTP ${res.status} for ${url}`);
@@ -640,13 +614,11 @@
       const endTime   = Number(e.end_time   || 0);
       const severity  = (e.severity || "").toLowerCase();
 
-      // Threat level (0/1/2)
       let threat = 0;
       if (typeof md.potential_threat_level === "number") {
         threat = Math.max(0, Math.min(2, md.potential_threat_level));
       }
 
-      // Time label "Mon, 11:18 AM"
       let timeLabel = "";
       if (startTime) {
         const d = new Date(startTime * 1000);
@@ -661,13 +633,11 @@
       const title = md.title || "Security event";
       const scene = md.scene || "No GenAI available";
 
-      // VOD path only; base is chosen later via Primary/Secondary
       const padStart = Math.max(0, Math.floor(startTime - 5));
       const padEnd   = Math.max(padStart + 1, Math.floor(endTime + 10));
       const vodPath  = `/vod/${cam}/start/${padStart}/end/${padEnd}/index.m3u8`;
       const videoUrlRaw = vodPath;
 
-      // Thumbnail always comes from PRIMARY (LOCAL_BASE)
       let thumbUrl = "";
       if (e.thumb_path) {
         let rel = e.thumb_path;
@@ -689,7 +659,7 @@
         scene,
         thumbUrl,
         videoUrlRaw,
-        previewUrl: "" // not used in v2 UI
+        previewUrl: ""
       };
     });
 
@@ -760,7 +730,6 @@
 
         if (existingVideo) {
           if (existingVideo.paused) {
-            // Pause any other playing videos
             allVideos.forEach(v => {
               if (v !== existingVideo) v.pause();
             });
@@ -771,7 +740,6 @@
           return;
         }
 
-        // No existing video in this card: pause all others, then create new one
         allVideos.forEach(v => v.pause());
 
         wrapper.innerHTML = "";
@@ -816,7 +784,6 @@
       const card = document.createElement("div");
       card.className = "card";
 
-      // Scene text: append Objects:... on mobile; keep separate on desktop
       let sceneText = ev.scene || "";
       if (isMobileSmall && ev.objectsList.length) {
         const objectsStr = `Objects: ${ev.objectsList.join(", ")}`;
@@ -830,7 +797,6 @@
       const normalizedVideoUrl = ev.videoUrlRaw ? normalizeVideoUrl(ev.videoUrlRaw) : "";
       const wrapperAttrs = normalizedVideoUrl ? ` data-video-url="${normalizedVideoUrl}"` : "";
 
-      // Threat → class for colored border
       let threatClass = "threat-low";
       if (ev.threat >= 2) {
         threatClass = "threat-high";
@@ -861,18 +827,16 @@
 
       card.innerHTML = `
         ${thumbBlock}
-
         <div class="title">${ev.title}</div>
         <div class="scene">${sceneText}</div>
         ${objectsDisplay}
       `;
 
-      // Title click toggles scene visibility
       const titleEl = card.querySelector(".title");
       const sceneEl = card.querySelector(".scene");
       if (titleEl && sceneEl) {
         titleEl.classList.add("title-toggle");
-        sceneEl.classList.add("collapsed");  // hidden by default
+        sceneEl.classList.add("collapsed");
         titleEl.addEventListener("click", () => {
           sceneEl.classList.toggle("collapsed");
         });
@@ -947,13 +911,11 @@
     }
   }
 
-  // Date change => reload that day from API
   logDateInput.addEventListener("change", () => {
     currentPage = 1;
     loadLog();
   });
 
-  // Filters
   cameraFilter.addEventListener("change", () => {
     currentPage = 1;
     renderPage();
@@ -982,7 +944,7 @@
 
   vodHostSelect.addEventListener("change", () => {
     selectedVodServer = vodHostSelect.value || "secondary";
-    renderPage(); // re-normalize URLs with new base
+    renderPage();
   });
 
   prevPageBtn.addEventListener("click", () => {
@@ -1002,7 +964,6 @@
   });
 
   window.addEventListener("resize", () => {
-    // Re-evaluate on resize so desktop always shows filters
     const isMobile = window.innerWidth <= 900;
     if (!isMobile) {
       advancedFilters.classList.remove("collapsed");
@@ -1010,7 +971,6 @@
     }
   });
 
-  // Initial load: init Server selector + filters panel + today's events from API
   window.addEventListener("DOMContentLoaded", () => {
     initVodHostSelect();
     initFiltersPanel();
