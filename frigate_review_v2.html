@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Frigate Daily Log Viewer v2 (API)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Reduce caching in HA iframe -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: #020617;
+      color: #e5e7eb;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #0f172a, #020617);
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+
+    h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.7rem;
+      font-weight: 600;
+    }
+
+    .api-status {
+      font-size: 0.75rem;
+      margin: 2px 0 10px 0;
+      color: #9ca3af; /* default gray */
+    }
+
+    .api-status.ok {
+      color: #10b981; /* green-500 */
+    }
+
+    .api-status.err {
+      color: #ef4444; /* red-500 */
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-bottom: 1rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: 0.9rem;
+      background: rgba(15,23,42,0.9);
+      border: 1px solid #1f2937;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .main-controls-row {
+      margin-bottom: 0.25rem;
+    }
+
+    .row-spacer {
+      flex: 1 1 auto;
+    }
+
+    #advancedFilters {
+      margin-top: 0.25rem;
+    }
+
+    .collapsed {
+      display: none;
+    }
+
+    label {
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+
+    input[type="date"], select {
+      background: #020617;
+      border-radius: 999px;
+      border: 1px solid #374151;
+      padding: 0.3rem 0.7rem;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      outline: none;
+    }
+
+    input[type="date"]:focus, select:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56,189,248,0.4);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+      border: 1px solid #4b5563;
+      color: #e5e7eb;
+      background: #020617;
+      transition: opacity 0.1s ease, transform 0.1s ease, box-shadow 0.1s ease;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(15,23,42,0.7);
+    }
+
+    .btn-secondary:disabled {
+      opacity: 0.4;
+      cursor: default;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+      gap: 1rem;
+    }
+
+    .card {
+      background: radial-gradient(circle at top left, #1f2937, #020617);
+      border-radius: 0.9rem;
+      padding: 0.75rem;
+      border: 1px solid #111827;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .thumb-wrapper {
+      position: relative;
+      border-radius: 0.7rem;
+      overflow: hidden;
+      background: #020617;
+      aspect-ratio: 16 / 9;
+      border: 2px solid transparent;
+      box-shadow: 0 0 0 0 rgba(0,0,0,0);
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .thumb-wrapper[data-video-url] {
+      cursor: pointer;
+    }
+
+    .thumb-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    .thumb-wrapper[data-video-url]:hover img {
+      transform: scale(1.02);
+      filter: brightness(1.05);
+    }
+
+    /* Threat-based borders */
+    .thumb-wrapper.threat-low {
+      border-color: #22c55e; /* green */
+      box-shadow: 0 0 12px rgba(34,197,94,0.4);
+    }
+
+    .thumb-wrapper.threat-med {
+      border-color: #eab308; /* yellow */
+      box-shadow: 0 0 12px rgba(234,179,8,0.4);
+    }
+
+    .thumb-wrapper.threat-high {
+      border-color: #ef4444; /* red */
+      box-shadow: 0 0 12px rgba(239,68,68,0.4);
+    }
+
+    .thumb-wrapper video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #000;
+    }
+
+    .chip-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.25rem;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      background: #111827;
+      border: 1px solid #1f2937;
+      color: #9ca3af;
+      white-space: nowrap;
+    }
+
+    .title {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .scene {
+      font-size: 0.82rem;
+      line-height: 1.4;
+      color: #d1d5db;
+      max-height: 4.2em;
+      overflow: hidden;
+    }
+
+    .objects {
+      font-size: 0.78rem;
+      color: #9ca3af;
+    }
+
+    .empty-message {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-top: 1rem;
+    }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      flex-wrap: wrap;
+    }
+
+    .page-info {
+      min-width: 110px;
+      text-align: center;
+    }
+
+    .bottom-left-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .bottom-right-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .bottom-label {
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+
+    .bottom-select {
+      background: #020617;
+      border-radius: 999px;
+      border: 1px solid #374151;
+      padding: 0.3rem 0.7rem;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+    }
+
+    .loaded-events {
+      font-size: 0.8rem;
+      color: #9ca3af;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 900px) {
+      .controls-row {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .main-controls-row {
+        flex-direction: row;
+      }
+
+      .page {
+        padding: 1rem;
+      }
+
+      h1 {
+        font-size: 1.4rem;
+      }
+
+      .pagination {
+        justify-content: center;
+      }
+
+      #toggleFilters {
+        display: inline-flex !important;
+      }
+    }
+
+    @media (min-width: 901px) {
+      /* On desktop, always show advanced filters and hide toggle button */
+      #advancedFilters.collapsed {
+        display: block;
+      }
+      #toggleFilters {
+        display: none !important;
+      }
+    }
+  </style>
+  <!-- HLS.js for inline HLS playback -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+<div class="page">
+  <h1>Frigate Daily Log Viewer v2</h1>
+  <div id="apiStatus" class="api-status">API: …</div>
+
+  <div class="controls">
+    <!-- Row 1: date only (always visible) + Filters button (mobile) -->
+    <div class="controls-row main-controls-row">
+      <label for="logDate">Log date:</label>
+      <input type="date" id="logDate" />
+
+      <div class="row-spacer"></div>
+
+      <button id="toggleFilters" class="btn-secondary" type="button">Filters ▾</button>
+    </div>
+
+    <!-- Advanced filters: collapsible on mobile -->
+    <div id="advancedFilters">
+      <!-- Single row: camera, threat, severity, objects, server -->
+      <div class="controls-row">
+        <label for="cameraFilter">Camera:</label>
+        <select id="cameraFilter">
+          <option value="all">All</option>
+        </select>
+
+        <label for="threatFilter">Threat:</label>
+        <select id="threatFilter">
+          <option value="all">All</option>
+          <option value="0">Low</option>
+          <option value="1">Med</option>
+          <option value="2">High</option>
+        </select>
+
+        <label for="eventSeverityFilter">Severity:</label>
+        <select id="eventSeverityFilter">
+          <option value="all">All</option>
+        </select>
+
+        <label for="objectsFilter">Objects:</label>
+        <select id="objectsFilter">
+          <option value="all">All</option>
+        </select>
+
+        <label for="vodHostSelect">Server:</label>
+        <select id="vodHostSelect"></select>
+      </div>
+    </div>
+  </div>
+
+  <div id="eventsContainer" class="grid"></div>
+  <div id="emptyMessage" class="empty-message"></div>
+
+  <div id="paginationControls" class="pagination">
+    <div class="bottom-left-group">
+      <label for="pageSizeSelect" class="bottom-label">Per page:</label>
+      <select id="pageSizeSelect" class="bottom-select">
+        <option value="12">12</option>
+        <option value="24">24</option>
+        <option value="48">48</option>
+      </select>
+
+      <span id="loadedEvents" class="loaded-events"></span>
+    </div>
+
+    <div class="bottom-right-group">
+      <button id="prevPage" class="btn-secondary" type="button">Prev</button>
+      <span id="pageInfo" class="page-info"></span>
+      <button id="nextPage" class="btn-secondary" type="button">Next</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const logDateInput        = document.getElementById("logDate");
+  const eventsContainer     = document.getElementById("eventsContainer");
+  const emptyMessage        = document.getElementById("emptyMessage");
+  const cameraFilter        = document.getElementById("cameraFilter");
+  const threatFilter        = document.getElementById("threatFilter");
+  const eventSeverityFilter = document.getElementById("eventSeverityFilter");
+  const objectsFilter       = document.getElementById("objectsFilter");
+  const pageSizeSelect      = document.getElementById("pageSizeSelect");
+  const prevPageBtn         = document.getElementById("prevPage");
+  const nextPageBtn         = document.getElementById("nextPage");
+  const pageInfoSpan        = document.getElementById("pageInfo");
+  const vodHostSelect       = document.getElementById("vodHostSelect");
+  const toggleFiltersBtn    = document.getElementById("toggleFilters");
+  const advancedFilters     = document.getElementById("advancedFilters");
+  const loadedEventsSpan    = document.getElementById("loadedEvents");
+  const apiStatusEl         = document.getElementById("apiStatus");
+
+  // ─────────────────────────────────────────────
+  // NVR CONFIG – base URLs under ha.loebees.com
+  // Primary = LOCAL_BASE, Secondary = REMOTE_BASE
+  // ─────────────────────────────────────────────
+  const NVR = {
+    LOCAL_BASE:  "https://primary.domain.com/nvr",        // Primary (thumbs + optional VOD) 
+    REMOTE_BASE: "https://secondary.domain.com/nvr-remote", // Secondary (VOD)
+    defaultBase() {
+      return this.REMOTE_BASE; // prefer Secondary by default for VOD
+    }
+  };
+
+  // Frigate API is always accessed directly on local IP
+  const FRIGATE_API_BASE = "https://primary.domain.com/nvr"; // Primary API
+
+  let lastEvents = [];
+  let currentPage = 1;
+  let pageSize = parseInt(pageSizeSelect.value, 10) || 12;
+  // selected VOD server: "primary" (LOCAL_BASE) or "secondary" (REMOTE_BASE)
+  let selectedVodServer = "secondary";
+
+  function setApiStatus(ok, msg) {
+    if (!apiStatusEl) return;
+    if (ok) {
+      apiStatusEl.textContent = "API OK – " + msg;
+      apiStatusEl.classList.remove("err");
+      apiStatusEl.classList.add("ok");
+    } else {
+      apiStatusEl.textContent = "API Error – " + msg;
+      apiStatusEl.classList.remove("ok");
+      apiStatusEl.classList.add("err");
+    }
+  }
+
+  function initVodHostSelect() {
+    if (!vodHostSelect) return;
+    vodHostSelect.innerHTML = `
+      <option value="secondary">Secondary</option>
+      <option value="primary">Primary</option>
+    `;
+    vodHostSelect.value = "secondary";   // default
+    selectedVodServer = "secondary";
+  }
+
+  function initFiltersPanel() {
+    const isMobile = window.innerWidth <= 900;
+    if (isMobile) {
+      advancedFilters.classList.add("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▾";
+    } else {
+      advancedFilters.classList.remove("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▴";
+    }
+  }
+
+  function toggleFilters() {
+    const isCollapsed = advancedFilters.classList.contains("collapsed");
+    if (isCollapsed) {
+      advancedFilters.classList.remove("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▴";
+    } else {
+      advancedFilters.classList.add("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▾";
+    }
+  }
+
+  function getTodayString() {
+    const t = new Date();
+    const y = t.getFullYear();
+    const m = String(t.getMonth() + 1).padStart(2, "0");
+    const d = String(t.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  logDateInput.value = getTodayString();
+
+  function getEpochRangeForDate(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const startDate = new Date(y, m-1, d, 0, 0, 0);
+    const endDate   = new Date(y, m-1, d, 23, 59, 59);
+    return {
+      start: Math.floor(startDate.getTime()/1000),
+      end:   Math.floor(endDate.getTime()/1000)
+    };
+  }
+
+  function abbreviateDay(str) {
+    const map = {
+      Monday:"Mon", Tuesday:"Tue", Wednesday:"Wed",
+      Thursday:"Thu", Friday:"Fri", Saturday:"Sat", Sunday:"Sun"
+    };
+    const parts = str.split(",");
+    if (parts.length < 2) return str;
+    const day = parts[0].trim();
+    return `${map[day]||day}, ${parts.slice(1).join(",").trim()}`;
+  }
+
+  // Normalize VOD URLs based on Server selection (base URL mapping)
+  function normalizeVideoUrl(url) {
+    try {
+      // Accept either full URL or just a /vod/... path
+      const vodIndex = url.indexOf("/vod/");
+      if (vodIndex === -1) {
+        return url; // not a vod path
+      }
+
+      const vodPath = url.substring(vodIndex); // "/vod/..."
+
+      let base;
+      if (selectedVodServer === "primary") {
+        base = NVR.LOCAL_BASE;      // https://ha.loebees.com/nvr
+      } else if (selectedVodServer === "secondary") {
+        base = NVR.REMOTE_BASE;     // https://ha.loebees.com/nvr-remote
+      } else {
+        base = NVR.defaultBase();   // fallback
+      }
+
+      return base.replace(/\/+$/,"") + vodPath;
+    } catch (e) {
+      console.warn("Could not normalize video URL:", url, e);
+      return url;
+    }
+  }
+
+  // Load events directly from Frigate /api/review via local IP
+  async function loadFromReviewApi(dateStr) {
+    const { start, end } = getEpochRangeForDate(dateStr);
+
+    const url = FRIGATE_API_BASE.replace(/\/+$/,"") +
+                `/api/review?after=${start}&before=${end}`;
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      setApiStatus(false, `HTTP ${res.status}`);
+      throw new Error(`Frigate API error: HTTP ${res.status} for ${url}`);
+    }
+
+    const data = await res.json();
+    const events = Array.isArray(data) ? data : (data.events || []);
+
+    const mapped = events.map((e, idx) => {
+      const cam = e.camera || "";
+      const dataBlock = e.data || {};
+      let md = dataBlock.metadata || {};
+      if (md === null || typeof md !== "object") md = {};
+
+      const objs = (dataBlock.objects || []).map(o => String(o).toLowerCase());
+      const startTime = Number(e.start_time || 0);
+      const endTime   = Number(e.end_time   || 0);
+      const severity  = (e.severity || "").toLowerCase();
+
+      // Threat level (0/1/2)
+      let threat = 0;
+      if (typeof md.potential_threat_level === "number") {
+        threat = Math.max(0, Math.min(2, md.potential_threat_level));
+      }
+
+      // Time label "Mon, 11:18 AM"
+      let timeLabel = "";
+      if (startTime) {
+        const d = new Date(startTime * 1000);
+        const full = d.toLocaleString(undefined, {
+          weekday: "long",
+          hour: "numeric",
+          minute: "2-digit"
+        });
+        timeLabel = abbreviateDay(full);
+      }
+
+      const title = md.title || "Security event";
+      const scene = md.scene || "No GenAI available";
+
+      // VOD path only; base is chosen later via Primary/Secondary
+      const padStart = Math.max(0, Math.floor(startTime - 5));
+      const padEnd   = Math.max(padStart + 1, Math.floor(endTime + 10));
+      const vodPath  = `/vod/${cam}/start/${padStart}/end/${padEnd}/index.m3u8`;
+      const videoUrlRaw = vodPath;
+
+      // Thumbnail always comes from PRIMARY (LOCAL_BASE)
+      let thumbUrl = "";
+      if (e.thumb_path) {
+        let rel = e.thumb_path;
+        if (rel.startsWith("/media/frigate")) {
+          rel = rel.substring("/media/frigate".length);
+        }
+        if (!rel.startsWith("/")) rel = "/" + rel;
+        thumbUrl = NVR.LOCAL_BASE.replace(/\/+$/,"") + rel;
+      }
+
+      return {
+        index: idx + 1,
+        time: timeLabel,
+        camera: cam,
+        threat,
+        eventSeverity: severity,
+        objectsList: objs,
+        title,
+        scene,
+        thumbUrl,
+        videoUrlRaw,
+        previewUrl: "" // not used in v2 UI
+      };
+    });
+
+    setApiStatus(true, `${mapped.length} events`);
+    return mapped;
+  }
+
+  function updateCameraOptions(events) {
+    const cams = [...new Set(events.map(e=>e.camera))].sort();
+    cameraFilter.innerHTML = '<option value="all">All</option>';
+    cams.forEach(c=>{
+      cameraFilter.innerHTML += `<option value="${c}">${c}</option>`;
+    });
+  }
+
+  function updateSeverityOptions(events) {
+    const sevs = [...new Set(events.map(e=>e.eventSeverity).filter(Boolean))].sort();
+    eventSeverityFilter.innerHTML = '<option value="all">All</option>';
+    sevs.forEach(s=>{
+      eventSeverityFilter.innerHTML += `<option value="${s}">${s}</option>`;
+    });
+  }
+
+  function updateObjectsOptions(events) {
+    const objs = new Set();
+    events.forEach(e=>e.objectsList.forEach(o=>objs.add(o)));
+    objectsFilter.innerHTML = '<option value="all">All</option>';
+    [...objs].sort().forEach(o=>{
+      objectsFilter.innerHTML += `<option value="${o}">${o}</option>`;
+    });
+  }
+
+  function applyFilters(events) {
+    let res = events;
+
+    const cam = cameraFilter.value;
+    if (cam !== "all") {
+      res = res.filter(e => e.camera === cam);
+    }
+
+    const t = threatFilter.value;
+    if (t !== "all") {
+      res = res.filter(e => e.threat >= parseInt(t, 10));
+    }
+
+    const sev = eventSeverityFilter.value;
+    if (sev !== "all") {
+      res = res.filter(e => (e.eventSeverity || "") === sev);
+    }
+
+    const obj = objectsFilter.value;
+    if (obj !== "all") {
+      res = res.filter(e => e.objectsList.includes(obj));
+    }
+
+    return res;
+  }
+
+  function setupThumbnailClickHandlers() {
+    const wrappers = document.querySelectorAll(".thumb-wrapper[data-video-url]");
+    wrappers.forEach(wrapper => {
+      const url = wrapper.dataset.videoUrl;
+      if (!url) return;
+
+      wrapper.addEventListener("click", () => {
+        const allVideos = document.querySelectorAll(".thumb-wrapper video");
+        const existingVideo = wrapper.querySelector("video");
+
+        if (existingVideo) {
+          if (existingVideo.paused) {
+            // Pause any other playing videos
+            allVideos.forEach(v => {
+              if (v !== existingVideo) v.pause();
+            });
+            existingVideo.play();
+          } else {
+            existingVideo.pause();
+          }
+          return;
+        }
+
+        // No existing video in this card: pause all others, then create new one
+        allVideos.forEach(v => v.pause());
+
+        wrapper.innerHTML = "";
+        const video = document.createElement("video");
+        video.controls = true;
+        video.autoplay = true;
+        video.playsInline = true;
+
+        video.addEventListener("error", (e) => {
+          console.error("Video playback error for", url, e, video.error);
+        });
+
+        const src = normalizeVideoUrl(url);
+
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = src;
+        } else if (window.Hls && window.Hls.isSupported()) {
+          const hls = new Hls();
+          hls.loadSource(src);
+          hls.attachMedia(video);
+        } else {
+          video.src = src;
+        }
+
+        wrapper.appendChild(video);
+      });
+    });
+  }
+
+  function renderCards(events) {
+    eventsContainer.innerHTML = "";
+    emptyMessage.textContent = "";
+
+    if (!events.length) {
+      emptyMessage.textContent = "No events found.";
+      return;
+    }
+
+    for (const ev of events) {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      const objectsDisplay = ev.objectsList.length
+        ? `<div class="objects">Objects: ${ev.objectsList.join(", ")}</div>`
+        : "";
+
+      const normalizedVideoUrl = ev.videoUrlRaw ? normalizeVideoUrl(ev.videoUrlRaw) : "";
+      const wrapperAttrs = normalizedVideoUrl ? ` data-video-url="${normalizedVideoUrl}"` : "";
+
+      // Threat → class for colored border
+      let threatClass = "threat-low";
+      if (ev.threat >= 2) {
+        threatClass = "threat-high";
+      } else if (ev.threat === 1) {
+        threatClass = "threat-med";
+      }
+
+      const thumbInner = ev.thumbUrl
+        ? `<img src="${ev.thumbUrl}" title="${ev.scene.replace(/"/g,'&quot;')}">`
+        : "";
+
+      const thumbBlock = thumbInner.trim()
+        ? `<div class="thumb-wrapper ${threatClass}"${wrapperAttrs}>${thumbInner}</div>`
+        : "";
+
+      card.innerHTML = `
+        ${thumbBlock}
+
+        <div class="chip-row">
+          <span class="chip">${ev.camera}</span>
+          <span class="chip">${ev.eventSeverity || ""}${ev.eventSeverity ? " • " : ""}${ev.time}</span>
+        </div>
+
+        <div class="title">${ev.title}</div>
+        <div class="scene">${ev.scene}</div>
+        ${objectsDisplay}
+      `;
+
+      eventsContainer.appendChild(card);
+    }
+
+    setupThumbnailClickHandlers();
+  }
+
+  function renderPage() {
+    const filtered = applyFilters(lastEvents);
+    const total = filtered.length;
+
+    if (!total) {
+      renderCards([]);
+      pageInfoSpan.textContent = "No results";
+      prevPageBtn.disabled = true;
+      nextPageBtn.disabled = true;
+      return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const startIndex = (currentPage - 1) * pageSize;
+    const pageEvents = filtered.slice(startIndex, startIndex + pageSize);
+
+    renderCards(pageEvents);
+
+    pageInfoSpan.textContent = `Page ${currentPage} of ${totalPages}`;
+    prevPageBtn.disabled = currentPage <= 1;
+    nextPageBtn.disabled = currentPage >= totalPages;
+  }
+
+  async function loadLog() {
+    try {
+      if (apiStatusEl) {
+        apiStatusEl.textContent = "API: loading…";
+        apiStatusEl.classList.remove("ok", "err");
+      }
+
+      const dateVal = logDateInput.value || getTodayString();
+      const dayEvents = await loadFromReviewApi(dateVal);
+
+      lastEvents = dayEvents;
+      currentPage = 1;
+
+      updateCameraOptions(dayEvents);
+      updateSeverityOptions(dayEvents);
+      updateObjectsOptions(dayEvents);
+
+      loadedEventsSpan.textContent = `${dayEvents.length} events loaded`;
+
+      renderPage();
+    }
+    catch(err) {
+      console.error(err);
+      setApiStatus(false, err.message);
+      emptyMessage.textContent = "Failed to load events: " + err.message;
+      eventsContainer.innerHTML = "";
+      pageInfoSpan.textContent = "";
+      prevPageBtn.disabled = true;
+      nextPageBtn.disabled = true;
+      loadedEventsSpan.textContent = "";
+    }
+  }
+
+  // Date change => reload that day from API
+  logDateInput.addEventListener("change", () => {
+    currentPage = 1;
+    loadLog();
+  });
+
+  // Filters
+  cameraFilter.addEventListener("change", () => {
+    currentPage = 1;
+    renderPage();
+  });
+
+  threatFilter.addEventListener("change", () => {
+    currentPage = 1;
+    renderPage();
+  });
+
+  eventSeverityFilter.addEventListener("change", () => {
+    currentPage = 1;
+    renderPage();
+  });
+
+  objectsFilter.addEventListener("change", () => {
+    currentPage = 1;
+    renderPage();
+  });
+
+  pageSizeSelect.addEventListener("change", () => {
+    pageSize = parseInt(pageSizeSelect.value, 10) || 12;
+    currentPage = 1;
+    renderPage();
+  });
+
+  vodHostSelect.addEventListener("change", () => {
+    selectedVodServer = vodHostSelect.value || "secondary";
+    renderPage(); // re-normalize URLs with new base
+  });
+
+  prevPageBtn.addEventListener("click", () => {
+    if (currentPage > 1) {
+      currentPage--;
+      renderPage();
+    }
+  });
+
+  nextPageBtn.addEventListener("click", () => {
+    currentPage++;
+    renderPage();
+  });
+
+  toggleFiltersBtn.addEventListener("click", () => {
+    toggleFilters();
+  });
+
+  window.addEventListener("resize", () => {
+    // Re-evaluate on resize so desktop always shows filters
+    const isMobile = window.innerWidth <= 900;
+    if (!isMobile) {
+      advancedFilters.classList.remove("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▴";
+    }
+  });
+
+  // Initial load: init Server selector + filters panel + today's events from API
+  window.addEventListener("DOMContentLoaded", () => {
+    initVodHostSelect();
+    initFiltersPanel();
+    loadLog();
+  });
+</script>
+</body>
+</html>
