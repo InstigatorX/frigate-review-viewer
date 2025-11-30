@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <title>Frigate Daily Log Viewer v2 (API)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Reduce caching in HA iframe -->
+  <!-- Reduce caching when embedded in Home Assistant iframes -->
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -149,6 +149,7 @@
       transform: none;
     }
 
+    /* Card grid */
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
@@ -166,6 +167,7 @@
       gap: 0.5rem;
     }
 
+    /* Thumbnail + threat border */
     .thumb-wrapper {
       position: relative;
       border-radius: 0.7rem;
@@ -194,6 +196,7 @@
       filter: brightness(1.05);
     }
 
+    /* Camera chip overlay (top-left) */
     .thumb-camera-chip {
       position: absolute;
       top: 6px;
@@ -207,6 +210,7 @@
       pointer-events: none;
     }
 
+    /* Severity/time chip overlay (bottom-left) */
     .thumb-meta-chip {
       position: absolute;
       bottom: 6px;
@@ -220,6 +224,7 @@
       pointer-events: none;
     }
 
+    /* Threat-based border colors */
     .thumb-wrapper.threat-low {
       border-color: #22c55e;
       box-shadow: 0 0 12px rgba(34,197,94,0.4);
@@ -275,6 +280,7 @@
       margin-top: 1rem;
     }
 
+    /* Pagination + bottom controls */
     .pagination {
       display: flex;
       align-items: center;
@@ -325,6 +331,7 @@
       white-space: nowrap;
     }
 
+    /* Mobile tweaks */
     @media (max-width: 900px) {
       .controls-row {
         flex-direction: row;
@@ -354,6 +361,7 @@
     }
 
     @media (max-width: 600px) {
+      /* On smaller phones, force 2 columns of smaller cards */
       .grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -368,6 +376,7 @@
     }
 
     @media (min-width: 901px) {
+      /* Desktop: always show filters, hide toggle button */
       #advancedFilters.collapsed {
         display: block;
       }
@@ -376,6 +385,7 @@
       }
     }
   </style>
+  <!-- HLS.js for inline HLS playback of .m3u8 streams -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
@@ -386,6 +396,7 @@
   </div>
 
   <div class="controls">
+    <!-- Top row: date (always visible) + filter toggle (on mobile) -->
     <div class="controls-row main-controls-row">
       <label for="logDate">Log date:</label>
       <input type="date" id="logDate" />
@@ -393,6 +404,7 @@
       <button id="toggleFilters" class="btn-secondary" type="button">Filters ▾</button>
     </div>
 
+    <!-- Advanced filters: collapsible on mobile, always shown on desktop -->
     <div id="advancedFilters">
       <div class="controls-row">
         <label for="cameraFilter">Camera:</label>
@@ -427,6 +439,7 @@
   <div id="eventsContainer" class="grid"></div>
   <div id="emptyMessage" class="empty-message"></div>
 
+  <!-- Bottom: pagination + per-page selector + loaded count -->
   <div id="paginationControls" class="pagination">
     <div class="bottom-left-group">
       <label for="pageSizeSelect" class="bottom-label">Per page:</label>
@@ -446,10 +459,14 @@
     </div>
   </div>
 
+  <!-- Simple API health line (bottom of page) -->
   <div id="apiStatus" class="api-status">API: …</div>
 </div>
 
 <script>
+  // ─────────────────────────────────────────────────────
+  // DOM references
+  // ─────────────────────────────────────────────────────
   const logDateInput        = document.getElementById("logDate");
   const eventsContainer     = document.getElementById("eventsContainer");
   const emptyMessage        = document.getElementById("emptyMessage");
@@ -468,23 +485,38 @@
   const apiStatusEl         = document.getElementById("apiStatus");
   const eventCountBadgeEl   = document.getElementById("eventCountBadge");
 
+  // ─────────────────────────────────────────────────────
+  // NVR configuration
+  // - Builds primary and secondary paths from the current origin
+  // - Primary = /nvr (API + thumbnails)
+  // - Secondary = /nvr-remote (VOD)
+  // ─────────────────────────────────────────────────────
   const ORIGIN = window.location.origin;
 
   const NVR = {
     LOCAL_BASE:  ORIGIN + "/nvr",
     REMOTE_BASE: ORIGIN + "/nvr-remote",
     defaultBase() {
+      // Default to secondary for VOD playback if nothing is selected
       return this.REMOTE_BASE;
     }
   };
 
+  // Frigate API is proxied from the primary NVR path
   const FRIGATE_API_BASE = NVR.LOCAL_BASE;
 
+  // ─────────────────────────────────────────────────────
+  // State
+  // ─────────────────────────────────────────────────────
   let lastEvents = [];
   let currentPage = 1;
   let pageSize = parseInt(pageSizeSelect.value, 10) || 12;
+  // VOD server selection: "primary" (LOCAL_BASE) or "secondary" (REMOTE_BASE)
   let selectedVodServer = "secondary";
 
+  // ─────────────────────────────────────────────────────
+  // Helpers: status + badges
+  // ─────────────────────────────────────────────────────
   function setApiStatus(ok, msg) {
     if (!apiStatusEl) return;
     if (ok) {
@@ -504,8 +536,12 @@
     eventCountBadgeEl.textContent = `${count} ${label}`;
   }
 
+  // ─────────────────────────────────────────────────────
+  // Filters panel + VOD host selector
+  // ─────────────────────────────────────────────────────
   function initVodHostSelect() {
     if (!vodHostSelect) return;
+    // Primary = local NVR, Secondary = remote NVR
     vodHostSelect.innerHTML = `
       <option value="secondary">Secondary</option>
       <option value="primary">Primary</option>
@@ -517,9 +553,11 @@
   function initFiltersPanel() {
     const isMobile = window.innerWidth <= 900;
     if (isMobile) {
+      // Start with filters collapsed on smaller screens
       advancedFilters.classList.add("collapsed");
       toggleFiltersBtn.textContent = "Filters ▾";
     } else {
+      // Always show filters on larger displays
       advancedFilters.classList.remove("collapsed");
       toggleFiltersBtn.textContent = "Filters ▴";
     }
@@ -536,6 +574,9 @@
     }
   }
 
+  // ─────────────────────────────────────────────────────
+  // Date & time helpers
+  // ─────────────────────────────────────────────────────
   function getTodayString() {
     const t = new Date();
     const y = t.getFullYear();
@@ -567,13 +608,18 @@
     return `${map[day]||day}, ${parts.slice(1).join(",").trim()}`;
   }
 
+  // ─────────────────────────────────────────────────────
+  // URL helpers: normalize VOD URLs to selected server
+  // ─────────────────────────────────────────────────────
   function normalizeVideoUrl(url) {
     try {
+      // Accept either a full URL or a relative /vod/... path from Frigate
       const vodIndex = url.indexOf("/vod/");
       if (vodIndex === -1) {
         return url;
       }
-      const vodPath = url.substring(vodIndex);
+      const vodPath = url.substring(vodIndex); // "/vod/..."
+
       let base;
       if (selectedVodServer === "primary") {
         base = NVR.LOCAL_BASE;
@@ -589,6 +635,9 @@
     }
   }
 
+  // ─────────────────────────────────────────────────────
+  // Data loading: /api/review proxied through FRIGATE_API_BASE
+  // ─────────────────────────────────────────────────────
   async function loadFromReviewApi(dateStr) {
     const { start, end } = getEpochRangeForDate(dateStr);
     const url = FRIGATE_API_BASE.replace(/\/+$/,"") +
@@ -603,6 +652,7 @@
     const data = await res.json();
     const events = Array.isArray(data) ? data : (data.events || []);
 
+    // Map raw Frigate events into the structure used by the viewer
     const mapped = events.map((e, idx) => {
       const cam = e.camera || "";
       const dataBlock = e.data || {};
@@ -614,11 +664,13 @@
       const endTime   = Number(e.end_time   || 0);
       const severity  = (e.severity || "").toLowerCase();
 
+      // Threat level (0–2) from metadata, used for border color
       let threat = 0;
       if (typeof md.potential_threat_level === "number") {
         threat = Math.max(0, Math.min(2, md.potential_threat_level));
       }
 
+      // Human-readable time label, abbreviated weekday
       let timeLabel = "";
       if (startTime) {
         const d = new Date(startTime * 1000);
@@ -633,11 +685,13 @@
       const title = md.title || "Security event";
       const scene = md.scene || "No GenAI available";
 
+      // Add a few seconds of padding around the event for VOD
       const padStart = Math.max(0, Math.floor(startTime - 5));
       const padEnd   = Math.max(padStart + 1, Math.floor(endTime + 10));
       const vodPath  = `/vod/${cam}/start/${padStart}/end/${padEnd}/index.m3u8`;
       const videoUrlRaw = vodPath;
 
+      // Thumbnails always come from the primary NVR path
       let thumbUrl = "";
       if (e.thumb_path) {
         let rel = e.thumb_path;
@@ -667,6 +721,9 @@
     return mapped;
   }
 
+  // ─────────────────────────────────────────────────────
+  // Filter option builders (camera / severity / objects)
+  // ─────────────────────────────────────────────────────
   function updateCameraOptions(events) {
     const cams = [...new Set(events.map(e=>e.camera))].sort();
     cameraFilter.innerHTML = '<option value="all">All</option>';
@@ -692,6 +749,9 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────
+  // Client-side filters (camera / threat / severity / object)
+  // ─────────────────────────────────────────────────────
   function applyFilters(events) {
     let res = events;
 
@@ -718,6 +778,9 @@
     return res;
   }
 
+  // ─────────────────────────────────────────────────────
+  // Video click handling: inline HLS playback, one-at-a-time
+  // ─────────────────────────────────────────────────────
   function setupThumbnailClickHandlers() {
     const wrappers = document.querySelectorAll(".thumb-wrapper[data-video-url]");
     wrappers.forEach(wrapper => {
@@ -730,6 +793,7 @@
 
         if (existingVideo) {
           if (existingVideo.paused) {
+            // If a video already exists in this card, pause others and play this one
             allVideos.forEach(v => {
               if (v !== existingVideo) v.pause();
             });
@@ -740,6 +804,7 @@
           return;
         }
 
+        // No existing video in this card: pause any others, then create a new player
         allVideos.forEach(v => v.pause());
 
         wrapper.innerHTML = "";
@@ -769,6 +834,9 @@
     });
   }
 
+  // ─────────────────────────────────────────────────────
+  // Rendering of event cards
+  // ─────────────────────────────────────────────────────
   function renderCards(events) {
     eventsContainer.innerHTML = "";
     emptyMessage.textContent = "";
@@ -784,6 +852,7 @@
       const card = document.createElement("div");
       card.className = "card";
 
+      // On small screens, fold "Objects: ..." into the scene text
       let sceneText = ev.scene || "";
       if (isMobileSmall && ev.objectsList.length) {
         const objectsStr = `Objects: ${ev.objectsList.join(", ")}`;
@@ -797,6 +866,7 @@
       const normalizedVideoUrl = ev.videoUrlRaw ? normalizeVideoUrl(ev.videoUrlRaw) : "";
       const wrapperAttrs = normalizedVideoUrl ? ` data-video-url="${normalizedVideoUrl}"` : "";
 
+      // Threat → class for colored border
       let threatClass = "threat-low";
       if (ev.threat >= 2) {
         threatClass = "threat-high";
@@ -808,10 +878,12 @@
         ? `<img src="${ev.thumbUrl}" title="${ev.scene.replace(/"/g,'&quot;')}">`
         : "";
 
+      // Camera overlay chip (top-left)
       const cameraOverlay = ev.camera
         ? `<div class="thumb-camera-chip">${ev.camera}</div>`
         : "";
 
+      // Combined severity/time chip (bottom-left)
       const metaLabel = `${ev.eventSeverity || ""}${ev.eventSeverity ? " • " : ""}${ev.time || ""}`.trim();
       const metaOverlay = metaLabel
         ? `<div class="thumb-meta-chip">${metaLabel}</div>`
@@ -832,6 +904,7 @@
         ${objectsDisplay}
       `;
 
+      // Title acts as a toggle for the scene/description
       const titleEl = card.querySelector(".title");
       const sceneEl = card.querySelector(".scene");
       if (titleEl && sceneEl) {
@@ -848,6 +921,9 @@
     setupThumbnailClickHandlers();
   }
 
+  // ─────────────────────────────────────────────────────
+  // Pagination logic
+  // ─────────────────────────────────────────────────────
   function renderPage() {
     const filtered = applyFilters(lastEvents);
     const total = filtered.length;
@@ -877,6 +953,9 @@
     nextPageBtn.disabled = currentPage >= totalPages;
   }
 
+  // ─────────────────────────────────────────────────────
+  // Main load function: fetch + map + render
+  // ─────────────────────────────────────────────────────
   async function loadLog() {
     try {
       if (apiStatusEl) {
@@ -911,6 +990,9 @@
     }
   }
 
+  // ─────────────────────────────────────────────────────
+  // Event bindings
+  // ─────────────────────────────────────────────────────
   logDateInput.addEventListener("change", () => {
     currentPage = 1;
     loadLog();
@@ -944,6 +1026,7 @@
 
   vodHostSelect.addEventListener("change", () => {
     selectedVodServer = vodHostSelect.value || "secondary";
+    // Re-render to update URLs with the chosen base
     renderPage();
   });
 
@@ -963,6 +1046,7 @@
     toggleFilters();
   });
 
+  // When resizing, ensure desktop layout shows filters by default
   window.addEventListener("resize", () => {
     const isMobile = window.innerWidth <= 900;
     if (!isMobile) {
@@ -971,6 +1055,9 @@
     }
   });
 
+  // ─────────────────────────────────────────────────────
+  // Initial bootstrap: set up selectors + load today's events
+  // ─────────────────────────────────────────────────────
   window.addEventListener("DOMContentLoaded", () => {
     initVodHostSelect();
     initFiltersPanel();
