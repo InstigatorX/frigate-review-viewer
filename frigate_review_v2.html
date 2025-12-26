@@ -379,7 +379,7 @@
         <select id="reviewedFilter">
           <option value="all">All</option>
           <option value="yes">Yes</option>
-          <option value="no">No</option>
+          <option value="no" selected>No</option>
         </select>
 
         <label for="vodHostSelect">Server:</label>
@@ -426,8 +426,16 @@
       <button id="playerPrev" class="btn-secondary" type="button">Prev</button>
       <button id="playerNext" class="btn-secondary" type="button">Next</button>
     </div>
+
     <div id="playerTitle" class="player-title">Event</div>
+
     <div class="bottom-right-group">
+      <!-- NEW: server selector in player view -->
+      <select id="playerVodHostSelect" class="bottom-select" title="Server">
+        <option value="secondary">Secondary</option>
+        <option value="primary">Primary</option>
+      </select>
+
       <button id="playerDownload" class="btn-secondary" type="button">Download</button>
       <button id="playerToday" class="btn-secondary" type="button">Today</button>
     </div>
@@ -478,8 +486,10 @@
   const playerVideoEl   = document.getElementById("playerVideo");
   const playerMetaLeft  = document.getElementById("playerMetaLeft");
   const playerMetaRight = document.getElementById("playerMetaRight");
-
   const playerDownloadBtn = document.getElementById("playerDownload");
+
+  // NEW: player server selector
+  const playerVodHostSelect = document.getElementById("playerVodHostSelect");
 
   // ─────────────────────────────────────────────────────
   // Config
@@ -535,10 +545,9 @@
     const todayStr = getTodayString();
     const val = logDateInput.value || todayStr;
 
-    // Today button shown only when not on today
     if (val === todayStr) {
       todayBtn.style.display = "none";
-      nextDayBtn.style.display = "none";   // no Next on current day
+      nextDayBtn.style.display = "none";
       nextDayBtn.disabled = true;
     } else {
       todayBtn.style.display = "inline-flex";
@@ -546,7 +555,6 @@
       nextDayBtn.disabled = false;
     }
 
-    // Prev always available
     prevDayBtn.disabled = false;
   }
 
@@ -588,13 +596,19 @@
   // ─────────────────────────────────────────────────────
   // Filters panel
   // ─────────────────────────────────────────────────────
+  function setSelectedVodServer(v) {
+    selectedVodServer = (v === "primary") ? "primary" : "secondary";
+    if (vodHostSelect) vodHostSelect.value = selectedVodServer;
+    if (playerVodHostSelect) playerVodHostSelect.value = selectedVodServer;
+  }
+
   function initVodHostSelect() {
     vodHostSelect.innerHTML = `
       <option value="secondary">Secondary</option>
       <option value="primary">Primary</option>
     `;
-    vodHostSelect.value = "secondary";
-    selectedVodServer = "secondary";
+    // default secondary
+    setSelectedVodServer("secondary");
   }
 
   function initFiltersPanel() {
@@ -656,13 +670,10 @@
   }
 
   function buildMp4ClipUrl(ev) {
-  // Example:
-  // /api/<camera>/start/<start>/end/<end>/clip.mp4
-  const cam = ev.camera;
-  const start = Math.max(0, Math.floor(ev.startTime - 5));
-  const end   = Math.max(start + 1, Math.floor(ev.endTime + 10));
-
-  return `${FRIGATE_API_BASE}/api/${cam}/start/${start}/end/${end}/clip.mp4`;
+    const cam = ev.camera;
+    const start = Math.max(0, Math.floor(ev.startTime - 5));
+    const end   = Math.max(start + 1, Math.floor(ev.endTime + 10));
+    return `${FRIGATE_API_BASE}/api/${cam}/start/${start}/end/${end}/clip.mp4`;
   }
 
   // ─────────────────────────────────────────────────────
@@ -833,8 +844,6 @@
     if (!eventId) return;
     const params = new URLSearchParams();
     params.set("event", eventId);
-    // keep date in querystring so external links can include ?date=YYYY-MM-DD
-    // (hash is just the event)
     window.location.hash = params.toString();
   }
 
@@ -857,6 +866,7 @@
 
   function closePlayerScreen(clearHash = true) {
     destroyPlayerHls();
+    playerVideoEl.onplay = null;
     playerVideoEl.pause();
     playerVideoEl.removeAttribute("src");
     playerVideoEl.load();
@@ -870,7 +880,6 @@
   }
 
   function getFilteredListForNav() {
-    // navigation follows the CURRENT filters (not pagination)
     return applyFilters(lastEvents);
   }
 
@@ -884,7 +893,6 @@
 
     const ev = list[idx];
     const src = normalizeVideoUrl(ev.vodPath);
-
     const mp4Url = buildMp4ClipUrl(ev);
 
     playerDownloadBtn.onclick = () => {
@@ -900,25 +908,17 @@
     playerMetaLeft.textContent = `${ev.camera || ""}`.trim();
     playerMetaRight.textContent = `${ev.eventSeverity || ""}${ev.eventSeverity ? " • " : ""}${ev.time || ""}`.trim();
 
-    // show player screen
     playerScreen.classList.add("show");
     playerScreen.setAttribute("aria-hidden", "false");
 
-    // Today button in player: jump back to today (and close player)
     playerTodayBtn.style.display = (logDateInput.value === getTodayString()) ? "none" : "inline-flex";
 
-    // Prev/Next in player
     playerPrevBtn.disabled = idx <= 0;
     playerNextBtn.disabled = idx >= list.length - 1;
 
-    playerPrevBtn.onclick = () => {
-      if (idx > 0) setHashForEvent(list[idx - 1].id);
-    };
-    playerNextBtn.onclick = () => {
-      if (idx < list.length - 1) setHashForEvent(list[idx + 1].id);
-    };
+    playerPrevBtn.onclick = () => { if (idx > 0) setHashForEvent(list[idx - 1].id); };
+    playerNextBtn.onclick = () => { if (idx < list.length - 1) setHashForEvent(list[idx + 1].id); };
 
-    // Load video
     destroyPlayerHls();
 
     if (playerVideoEl.canPlayType("application/vnd.apple.mpegurl")) {
@@ -931,17 +931,29 @@
       playerVideoEl.src = src;
     }
 
+    playerVideoEl.onplay = async () => {
+      try {
+        if (!ev.reviewed && ev.id) {
+          ev.reviewed = true;
+          const global = lastEvents.find(x => String(x.id) === String(ev.id));
+          if (global) global.reviewed = true;
+          renderPage();
+          await markReviewed(ev.id);
+        }
+      } catch (err) {
+        console.error("Auto-mark reviewed failed", err);
+      }
+    };
+
     playerVideoEl.play().catch(()=>{});
   }
 
   function handleHashRoute() {
     const eventId = getHashEventId();
     if (!eventId) {
-      // only close if currently open
       if (playerScreen.classList.contains("show")) closePlayerScreen(false);
       return;
     }
-    // open (or update) player
     openPlayerForEventId(eventId);
   }
 
@@ -982,8 +994,6 @@
            </div>`
         : "";
 
-      // IMPORTANT: the thumbnail “link” is the event id (hash),
-      // so you can deep-link directly to: .../frigate_review_v2.html?date=YYYY-MM-DD#event=<id>
       const thumbBlock = thumbInner.trim()
         ? `<div class="thumb-wrapper ${threatClass}" data-event-id="${ev.id || ""}">
              ${thumbInner}
@@ -998,7 +1008,6 @@
         <div class="scene">${ev.scene || ""}</div>
       `;
 
-      // title toggles description (mobile-friendly)
       const titleEl = card.querySelector(".title");
       const sceneEl = card.querySelector(".scene");
       if (titleEl && sceneEl) {
@@ -1009,17 +1018,14 @@
         });
       }
 
-      // click thumbnail -> open player screen (via hash)
       const thumb = card.querySelector(".thumb-wrapper[data-event-id]");
       if (thumb && ev.id) {
         thumb.addEventListener("click", (e) => {
-          // if clicking the meta chip, don't open player (meta chip is for reviewed)
           if (e.target.closest(".thumb-meta-chip")) return;
           setHashForEvent(ev.id);
         });
       }
 
-      // click meta chip -> mark reviewed
       const metaChip = card.querySelector(".thumb-meta-chip[data-event-id]");
       if (metaChip && ev.id) {
         metaChip.addEventListener("click", async (clickEvt) => {
@@ -1028,7 +1034,6 @@
 
           const wasReviewed = !!ev.reviewed;
 
-          // optimistic UI
           ev.reviewed = true;
           const global = lastEvents.find(x => String(x.id) === String(ev.id));
           if (global) global.reviewed = true;
@@ -1081,7 +1086,6 @@
     prevPageBtn.disabled = currentPage <= 1;
     nextPageBtn.disabled = currentPage >= totalPages;
 
-    // if a hash is set, ensure player follows it
     handleHashRoute();
   }
 
@@ -1112,7 +1116,6 @@
       pageInfoSpan.textContent = "";
       prevPageBtn.disabled = true;
       nextPageBtn.disabled = true;
-      // also close player if open
       closePlayerScreen(false);
     }
   }
@@ -1126,7 +1129,6 @@
     loadLog();
   }
 
-  // date: load on selection (no extra confirm)
   logDateInput.addEventListener("change", onDateChanged);
 
   prevDayBtn.addEventListener("click", () => changeDayBy(-1));
@@ -1139,7 +1141,6 @@
   });
 
   playerBackBtn.addEventListener("click", () => {
-    // easy back: clear hash (no reload)
     closePlayerScreen(true);
   });
 
@@ -1169,9 +1170,14 @@
   });
 
   vodHostSelect.addEventListener("change", () => {
-    selectedVodServer = vodHostSelect.value || "secondary";
-    // if player open, re-open current hash with new server
+    setSelectedVodServer(vodHostSelect.value || "secondary");
     handleHashRoute();
+  });
+
+  // NEW: player view server selector (default secondary, stays in sync)
+  playerVodHostSelect.addEventListener("change", () => {
+    setSelectedVodServer(playerVodHostSelect.value || "secondary");
+    handleHashRoute(); // reload current event stream from chosen server
   });
 
   prevPageBtn.addEventListener("click", () => {
@@ -1193,13 +1199,10 @@
   });
 
   window.addEventListener("hashchange", () => {
-    // Open/close player when hash changes
     handleHashRoute();
   });
 
-  // Boot: support direct links with ?date=YYYY-MM-DD#event=<id>
   window.addEventListener("DOMContentLoaded", () => {
-    // date default
     const qs = new URLSearchParams(window.location.search);
     const qsDate = qs.get("date");
     logDateInput.value = qsDate || getTodayString();
@@ -1209,7 +1212,9 @@
     initGridColumns();
     updateDayNavVisibility();
 
-    // Ensure player screen is closed initially; it will open after load if hash is present
+    // keep player selector in sync with default
+    if (playerVodHostSelect) playerVodHostSelect.value = selectedVodServer;
+
     closePlayerScreen(false);
     loadLog();
   });
