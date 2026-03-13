@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Frigate Daily Log Viewer v2 (API)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background-color: #020617;
+      color: #e5e7eb;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #0f172a, #020617);
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 0.15rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.7rem;
+      font-weight: 600;
+    }
+
+    .api-status {
+      font-size: 0.75rem;
+      margin-top: 0.75rem;
+      color: #9ca3af;
+      text-align: right;
+    }
+
+    .api-status.ok { color: #10b981; }
+    .api-status.err { color: #ef4444; }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-bottom: 1rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: 0.9rem;
+      background: rgba(15,23,42,0.9);
+      border: 1px solid #1f2937;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .main-controls-row { margin-bottom: 0.25rem; }
+    .row-spacer { flex: 1 1 auto; }
+
+    #advancedFilters { margin-top: 0.25rem; }
+    .collapsed { display: none; }
+
+    label {
+      font-size: 0.8rem;
+      color: #9ca3af;
+    }
+
+    input[type="date"], select {
+      background: #020617;
+      border-radius: 999px;
+      border: 1px solid #374151;
+      padding: 0.3rem 0.7rem;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+      outline: none;
+    }
+
+    input[type="date"]:focus, select:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 1px rgba(56,189,248,0.4);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.35rem 0.8rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+      border: 1px solid #4b5563;
+      color: #e5e7eb;
+      background: #020617;
+      transition: opacity 0.1s ease, transform 0.1s ease, box-shadow 0.1s ease;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(15,23,42,0.7);
+    }
+
+    .btn-secondary:disabled {
+      opacity: 0.4;
+      cursor: default;
+      box-shadow: none;
+      transform: none;
+    }
+
+    /* Grid */
+    .grid {
+      display: grid;
+      gap: 0.7rem;
+    }
+
+    .card {
+      background: radial-gradient(circle at top left, #1f2937, #020617);
+      border-radius: 0.9rem;
+      padding: 0.55rem;
+      border: 1px solid #111827;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    .thumb-wrapper {
+      position: relative;
+      border-radius: 0.7rem;
+      overflow: hidden;
+      background: #020617;
+      aspect-ratio: 16 / 9;
+      border: 2px solid transparent;
+      box-shadow: 0 0 0 0 rgba(0,0,0,0);
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+
+    .thumb-wrapper[data-event-id] { cursor: pointer; }
+
+    .thumb-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    .thumb-wrapper:hover img {
+      transform: scale(1.02);
+      filter: brightness(1.05);
+    }
+
+    .thumb-camera-chip {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.35);
+      border: 1px solid rgba(17, 24, 39, 0.5);
+      font-size: 0.5rem;
+      color: #e5e7eb;
+      pointer-events: none;
+    }
+
+    /* clickable meta chip (bottom-left) */
+    .thumb-meta-chip {
+      position: absolute;
+      bottom: 6px;
+      left: 6px;
+      padding: 0.1rem 0.4rem;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.35);
+      border: 1px solid rgba(17, 24, 39, 0.5);
+      font-size: 0.5rem;
+      color: #e5e7eb;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .thumb-meta-chip:hover { background: rgba(15, 23, 42, 0.55); }
+    .reviewed-check { font-size: 0.7rem; color: #22c55e; }
+
+    .thumb-wrapper.threat-low  { border-color: #22c55e; box-shadow: 0 0 12px rgba(34,197,94,0.4); }
+    .thumb-wrapper.threat-med  { border-color: #eab308; box-shadow: 0 0 12px rgba(234,179,8,0.4); }
+    .thumb-wrapper.threat-high { border-color: #ef4444; box-shadow: 0 0 12px rgba(239,68,68,0.4); }
+
+    .title { font-size: 1rem; font-weight: 600; }
+    .title-toggle { cursor: pointer; }
+
+    .scene {
+      font-size: 0.74rem;
+      line-height: 1.4;
+      color: #d1d5db;
+      max-height: 8em;
+      overflow: hidden;
+      margin-top: 0.15rem;
+    }
+
+    .scene.collapsed { display: none; }
+
+    .empty-message {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-top: 1rem;
+    }
+
+    /* Bottom controls */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: #9ca3af;
+      flex-wrap: wrap;
+    }
+
+    .page-info { min-width: 110px; text-align: center; }
+
+    .bottom-left-group,
+    .bottom-right-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .bottom-label { font-size: 0.8rem; color: #9ca3af; }
+    .bottom-select {
+      background: #020617;
+      border-radius: 999px;
+      border: 1px solid #374151;
+      padding: 0.3rem 0.7rem;
+      color: #e5e7eb;
+      font-size: 0.8rem;
+    }
+
+    /* Player "screen" */
+    .player-screen {
+      position: fixed;
+      inset: 0;
+      background: rgba(2,6,23,0.96);
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+    }
+
+    .player-screen.show { display: flex; }
+
+    .player-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.75rem 0.9rem;
+      border-bottom: 1px solid rgba(31,41,55,0.8);
+      background: rgba(15,23,42,0.8);
+    }
+
+    .player-title {
+      font-size: 0.9rem;
+      color: #e5e7eb;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 60vw;
+    }
+
+    .player-body {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.75rem;
+    }
+
+    .player-video {
+      width: min(1100px, 96vw);
+      height: auto;
+      max-height: 72vh;
+      background: #000;
+      border-radius: 0.9rem;
+      border: 1px solid rgba(17,24,39,0.8);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.55);
+    }
+
+    .player-sub {
+      width: min(1100px, 96vw);
+      margin: 0 auto 0.9rem;
+      color: #9ca3af;
+      font-size: 0.8rem;
+      padding: 0 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    /* Mobile */
+    @media (max-width: 900px) {
+      .page { padding: 1rem; }
+      h1 { font-size: 1.4rem; }
+      .pagination { justify-content: center; }
+      #toggleFilters { display: inline-flex !important; }
+      .player-title {
+        font-size: 0.675rem; /* 0.9rem * 0.75 = 25% smaller */
+        max-width: 52vw;     /* keeps it from crowding buttons */
+      }
+    }
+
+    @media (min-width: 901px) {
+      #advancedFilters.collapsed { display: block; }
+      #toggleFilters { display: none !important; }
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+
+<body>
+<div class="page">
+  <div class="header-row">
+    <h1>Frigate Daily Log Viewer v2</h1>
+  </div>
+
+  <div class="controls">
+    <div class="controls-row main-controls-row">
+      <input type="date" id="logDate" />
+      <button id="prevDay" class="btn-secondary" type="button">Prev</button>
+      <button id="todayBtn" class="btn-secondary" type="button">Today</button>
+      <button id="nextDay" class="btn-secondary" type="button">Next</button>
+      <div class="row-spacer"></div>
+      <button id="toggleFilters" class="btn-secondary" type="button">Filters ▾</button>
+    </div>
+
+    <div id="advancedFilters">
+      <div class="controls-row">
+        <label for="cameraFilter">Camera:</label>
+        <select id="cameraFilter"><option value="all">All</option></select>
+
+        <label for="threatFilter">Threat:</label>
+        <select id="threatFilter">
+          <option value="all">All</option>
+          <option value="0">Low</option>
+          <option value="1">Med</option>
+          <option value="2">High</option>
+        </select>
+
+        <label for="eventSeverityFilter">Severity:</label>
+        <select id="eventSeverityFilter"><option value="all">All</option></select>
+
+        <label for="objectsFilter">Objects:</label>
+        <select id="objectsFilter"><option value="all">All</option></select>
+
+        <label for="reviewedFilter">Reviewed:</label>
+        <select id="reviewedFilter">
+          <option value="all">All</option>
+          <option value="yes">Yes</option>
+          <option value="no" selected>No</option>
+        </select>
+
+        <label for="vodHostSelect">Server:</label>
+        <select id="vodHostSelect"></select>
+      </div>
+    </div>
+  </div>
+
+  <div id="eventsContainer" class="grid"></div>
+  <div id="emptyMessage" class="empty-message"></div>
+
+  <div id="paginationControls" class="pagination">
+    <div class="bottom-left-group">
+      <label for="pageSizeSelect" class="bottom-label">Per page:</label>
+      <select id="pageSizeSelect" class="bottom-select">
+        <option value="12">12</option>
+        <option value="24">24</option>
+        <option value="48">48</option>
+      </select>
+
+      <label for="columnsSelect" class="bottom-label">Columns:</label>
+      <select id="columnsSelect" class="bottom-select">
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+      </select>
+    </div>
+
+    <div class="bottom-right-group">
+      <button id="prevPage" class="btn-secondary" type="button">Prev</button>
+      <span id="pageInfo" class="page-info"></span>
+      <button id="nextPage" class="btn-secondary" type="button">Next</button>
+    </div>
+  </div>
+
+  <div id="apiStatus" class="api-status">API: …</div>
+</div>
+
+<!-- “Another screen” player view -->
+<div id="playerScreen" class="player-screen" aria-hidden="true">
+  <div class="player-topbar">
+    <div class="bottom-left-group">
+      <button id="playerBack" class="btn-secondary" type="button">Back</button>
+      <button id="playerPrev" class="btn-secondary" type="button">Prev</button>
+      <button id="playerNext" class="btn-secondary" type="button">Next</button>
+    </div>
+
+    <div id="playerTitle" class="player-title">Event</div>
+
+    <div class="bottom-right-group">
+      <!-- NEW: server selector in player view -->
+      <select id="playerVodHostSelect" class="bottom-select" title="Server">
+        <option value="secondary">Secondary</option>
+        <option value="primary">Primary</option>
+      </select>
+
+      <button id="playerDownload" class="btn-secondary" type="button">Download</button>
+      <button id="playerToday" class="btn-secondary" type="button">Today</button>
+    </div>
+  </div>
+
+  <div class="player-body">
+    <video id="playerVideo" class="player-video" controls playsinline></video>
+  </div>
+
+  <div class="player-sub">
+    <div id="playerMetaLeft"></div>
+    <div id="playerMetaRight"></div>
+  </div>
+</div>
+
+<script>
+  // ─────────────────────────────────────────────────────
+  // DOM
+  // ─────────────────────────────────────────────────────
+  const logDateInput        = document.getElementById("logDate");
+  const prevDayBtn          = document.getElementById("prevDay");
+  const nextDayBtn          = document.getElementById("nextDay");
+  const todayBtn            = document.getElementById("todayBtn");
+  const eventsContainer     = document.getElementById("eventsContainer");
+  const emptyMessage        = document.getElementById("emptyMessage");
+  const cameraFilter        = document.getElementById("cameraFilter");
+  const threatFilter        = document.getElementById("threatFilter");
+  const eventSeverityFilter = document.getElementById("eventSeverityFilter");
+  const objectsFilter       = document.getElementById("objectsFilter");
+  const reviewedFilter      = document.getElementById("reviewedFilter");
+  const pageSizeSelect      = document.getElementById("pageSizeSelect");
+  const columnsSelect       = document.getElementById("columnsSelect");
+  const prevPageBtn         = document.getElementById("prevPage");
+  const nextPageBtn         = document.getElementById("nextPage");
+  const pageInfoSpan        = document.getElementById("pageInfo");
+  const vodHostSelect       = document.getElementById("vodHostSelect");
+  const toggleFiltersBtn    = document.getElementById("toggleFilters");
+  const advancedFilters     = document.getElementById("advancedFilters");
+  const apiStatusEl         = document.getElementById("apiStatus");
+
+  // Player screen
+  const playerScreen    = document.getElementById("playerScreen");
+  const playerBackBtn   = document.getElementById("playerBack");
+  const playerPrevBtn   = document.getElementById("playerPrev");
+  const playerNextBtn   = document.getElementById("playerNext");
+  const playerTodayBtn  = document.getElementById("playerToday");
+  const playerTitleEl   = document.getElementById("playerTitle");
+  const playerVideoEl   = document.getElementById("playerVideo");
+  const playerMetaLeft  = document.getElementById("playerMetaLeft");
+  const playerMetaRight = document.getElementById("playerMetaRight");
+  const playerDownloadBtn = document.getElementById("playerDownload");
+
+  // NEW: player server selector
+  const playerVodHostSelect = document.getElementById("playerVodHostSelect");
+
+  // ─────────────────────────────────────────────────────
+  // Config
+  // ─────────────────────────────────────────────────────
+  const ORIGIN = window.location.origin;
+
+  const NVR = {
+    LOCAL_BASE:  ORIGIN + "/nvr",
+    REMOTE_BASE: ORIGIN + "/nvr-remote",
+    defaultBase() { return this.REMOTE_BASE; }
+  };
+
+  const FRIGATE_API_BASE = NVR.LOCAL_BASE;
+
+  // ─────────────────────────────────────────────────────
+  // State
+  // ─────────────────────────────────────────────────────
+  let lastEvents = [];
+  let currentPage = 1;
+  let pageSize = parseInt(pageSizeSelect.value, 10) || 12;
+  let selectedVodServer = "secondary";
+  let gridColumns = 0; // set later
+  let currentPlayerHls = null;
+
+  // ─────────────────────────────────────────────────────
+  // Status helper
+  // ─────────────────────────────────────────────────────
+  function setApiStatus(ok, msg) {
+    if (!apiStatusEl) return;
+    if (ok) {
+      apiStatusEl.textContent = "API OK – " + msg;
+      apiStatusEl.classList.remove("err");
+      apiStatusEl.classList.add("ok");
+    } else {
+      apiStatusEl.textContent = "API Error – " + msg;
+      apiStatusEl.classList.remove("ok");
+      apiStatusEl.classList.add("err");
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Date helpers
+  // ─────────────────────────────────────────────────────
+  function getTodayString() {
+    const t = new Date();
+    const y = t.getFullYear();
+    const m = String(t.getMonth() + 1).padStart(2, "0");
+    const d = String(t.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  function updateDayNavVisibility() {
+    const todayStr = getTodayString();
+    const val = logDateInput.value || todayStr;
+
+    if (val === todayStr) {
+      todayBtn.style.display = "none";
+      nextDayBtn.style.display = "none";
+      nextDayBtn.disabled = true;
+    } else {
+      todayBtn.style.display = "inline-flex";
+      nextDayBtn.style.display = "inline-flex";
+      nextDayBtn.disabled = false;
+    }
+
+    prevDayBtn.disabled = false;
+  }
+
+  function getEpochRangeForDate(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const startDate = new Date(y, m-1, d, 0, 0, 0);
+    const endDate   = new Date(y, m-1, d, 23, 59, 59);
+    return {
+      start: Math.floor(startDate.getTime()/1000),
+      end:   Math.floor(endDate.getTime()/1000)
+    };
+  }
+
+  function abbreviateDay(str) {
+    const map = {
+      Monday:"Mon", Tuesday:"Tue", Wednesday:"Wed",
+      Thursday:"Thu", Friday:"Fri", Saturday:"Sat", Sunday:"Sun"
+    };
+    const parts = str.split(",");
+    if (parts.length < 2) return str;
+    const day = parts[0].trim();
+    return `${map[day]||day}, ${parts.slice(1).join(",").trim()}`;
+  }
+
+  function changeDayBy(offset) {
+    const currentStr = logDateInput.value || getTodayString();
+    const [y, m, d] = currentStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + offset);
+    const ny = dt.getFullYear();
+    const nm = String(dt.getMonth() + 1).padStart(2, "0");
+    const nd = String(dt.getDate()).padStart(2, "0");
+    logDateInput.value = `${ny}-${nm}-${nd}`;
+    currentPage = 1;
+    updateDayNavVisibility();
+    loadLog();
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Filters panel
+  // ─────────────────────────────────────────────────────
+  function setSelectedVodServer(v) {
+    selectedVodServer = (v === "primary") ? "primary" : "secondary";
+    if (vodHostSelect) vodHostSelect.value = selectedVodServer;
+    if (playerVodHostSelect) playerVodHostSelect.value = selectedVodServer;
+  }
+
+  function initVodHostSelect() {
+    vodHostSelect.innerHTML = `
+      <option value="secondary">Secondary</option>
+      <option value="primary">Primary</option>
+    `;
+    // default secondary
+    setSelectedVodServer("secondary");
+  }
+
+  function initFiltersPanel() {
+    const isMobile = window.innerWidth <= 900;
+    if (isMobile) {
+      advancedFilters.classList.add("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▾";
+    } else {
+      advancedFilters.classList.remove("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▴";
+    }
+  }
+
+  function toggleFilters() {
+    const isCollapsed = advancedFilters.classList.contains("collapsed");
+    if (isCollapsed) {
+      advancedFilters.classList.remove("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▴";
+    } else {
+      advancedFilters.classList.add("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▾";
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Grid columns
+  // ─────────────────────────────────────────────────────
+  function applyGridColumns() {
+    if (!eventsContainer) return;
+    if (!gridColumns || gridColumns <= 0) {
+      eventsContainer.style.gridTemplateColumns = "";
+      return;
+    }
+    eventsContainer.style.gridTemplateColumns = `repeat(${gridColumns}, minmax(0, 1fr))`;
+  }
+
+  function initGridColumns() {
+    const width = window.innerWidth;
+    gridColumns = width <= 600 ? 2 : 3;
+    columnsSelect.value = String(gridColumns);
+    applyGridColumns();
+  }
+
+  // ─────────────────────────────────────────────────────
+  // URL helpers (VOD host selection)
+  // ─────────────────────────────────────────────────────
+  function normalizeVideoUrl(urlOrPath) {
+    const u = String(urlOrPath || "");
+    const vodIndex = u.indexOf("/vod/");
+    if (vodIndex === -1) return u;
+
+    const vodPath = u.substring(vodIndex);
+    let base;
+    if (selectedVodServer === "primary") base = NVR.LOCAL_BASE;
+    else if (selectedVodServer === "secondary") base = NVR.REMOTE_BASE;
+    else base = NVR.defaultBase();
+
+    return base.replace(/\/+$/,"") + vodPath;
+  }
+
+  function buildMp4ClipUrl(ev) {
+    const cam = ev.camera;
+    const start = Math.max(0, Math.floor(ev.startTime - 5));
+    const end   = Math.max(start + 1, Math.floor(ev.endTime + 10));
+    return `${FRIGATE_API_BASE}/api/${cam}/start/${start}/end/${end}/clip.mp4`;
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Reviewed API
+  // ─────────────────────────────────────────────────────
+  async function markReviewed(eventId) {
+    const base = FRIGATE_API_BASE.replace(/\/+$/,"");
+    const url = `${base}/api/reviews/viewed`;
+
+    console.log("Marking reviewed via", url, "for id:", eventId);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-CSRF-TOKEN": 1
+      },
+      body: JSON.stringify({ ids: [eventId] })
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      console.error("Review update failed", res.status, text);
+      throw new Error(`Review update failed: HTTP ${res.status}`);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Data loading
+  // ─────────────────────────────────────────────────────
+  async function loadFromReviewApi(dateStr) {
+    const { start, end } = getEpochRangeForDate(dateStr);
+    const url = FRIGATE_API_BASE.replace(/\/+$/,"") +
+                `/api/review?after=${start}&before=${end}`;
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      setApiStatus(false, `HTTP ${res.status}`);
+      throw new Error(`Frigate API error: HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const events = Array.isArray(data) ? data : (data.events || []);
+
+    const mapped = events.map((e, idx) => {
+      const cam = e.camera || "";
+      const dataBlock = e.data || {};
+      let md = dataBlock.metadata || {};
+      if (md === null || typeof md !== "object") md = {};
+
+      const objs = (dataBlock.objects || []).map(o => String(o).toLowerCase());
+      const startTime = Number(e.start_time || 0);
+      const endTime   = Number(e.end_time   || 0);
+      const severity  = (e.severity || "").toLowerCase();
+      const reviewed  = !!e.has_been_reviewed;
+
+      const id = e.id
+        || e.event_id
+        || e.review_id
+        || (e.data && (e.data.id || e.data.event_id || e.data.review_id))
+        || null;
+
+      let threat = 0;
+      if (typeof md.potential_threat_level === "number") {
+        threat = Math.max(0, Math.min(2, md.potential_threat_level));
+      }
+
+      let timeLabel = "";
+      if (startTime) {
+        const d = new Date(startTime * 1000);
+        const full = d.toLocaleString(undefined, {
+          weekday: "long",
+          hour: "numeric",
+          minute: "2-digit"
+        });
+        timeLabel = abbreviateDay(full);
+      }
+
+      const title = md.title || "Security event";
+      const scene = md.scene || "No GenAI available";
+
+      const padStart = Math.max(0, Math.floor(startTime - 5));
+      const padEnd   = Math.max(padStart + 1, Math.floor(endTime + 10));
+      const vodPath  = `/vod/${cam}/start/${padStart}/end/${padEnd}/index.m3u8`;
+
+      let thumbUrl = "";
+      if (e.thumb_path) {
+        let rel = e.thumb_path;
+        if (rel.startsWith("/media/frigate")) rel = rel.substring("/media/frigate".length);
+        if (!rel.startsWith("/")) rel = "/" + rel;
+        thumbUrl = NVR.LOCAL_BASE.replace(/\/+$/,"") + rel;
+      }
+
+      return {
+        id,
+        index: idx + 1,
+        time: timeLabel,
+        camera: cam,
+        threat,
+        eventSeverity: severity,
+        objectsList: objs,
+        reviewed,
+        title,
+        scene,
+        thumbUrl,
+        vodPath,
+        startTime,
+        endTime
+      };
+    });
+
+    setApiStatus(true, `${mapped.length} events`);
+    return mapped;
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Filter options
+  // ─────────────────────────────────────────────────────
+  function updateCameraOptions(events) {
+    const cams = [...new Set(events.map(e=>e.camera))].sort();
+    cameraFilter.innerHTML = '<option value="all">All</option>';
+    cams.forEach(c => cameraFilter.innerHTML += `<option value="${c}">${c}</option>`);
+  }
+
+  function updateSeverityOptions(events) {
+    const sevs = [...new Set(events.map(e=>e.eventSeverity).filter(Boolean))].sort();
+    eventSeverityFilter.innerHTML = '<option value="all">All</option>';
+    sevs.forEach(s => eventSeverityFilter.innerHTML += `<option value="${s}">${s}</option>`);
+  }
+
+  function updateObjectsOptions(events) {
+    const objs = new Set();
+    events.forEach(e => e.objectsList.forEach(o => objs.add(o)));
+    objectsFilter.innerHTML = '<option value="all">All</option>';
+    [...objs].sort().forEach(o => objectsFilter.innerHTML += `<option value="${o}">${o}</option>`);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Apply filters
+  // ─────────────────────────────────────────────────────
+  function applyFilters(events) {
+    let res = events;
+
+    const cam = cameraFilter.value;
+    if (cam !== "all") res = res.filter(e => e.camera === cam);
+
+    const t = threatFilter.value;
+    if (t !== "all") res = res.filter(e => e.threat >= parseInt(t, 10));
+
+    const sev = eventSeverityFilter.value;
+    if (sev !== "all") res = res.filter(e => (e.eventSeverity || "") === sev);
+
+    const obj = objectsFilter.value;
+    if (obj !== "all") res = res.filter(e => e.objectsList.includes(obj));
+
+    const rev = reviewedFilter.value;
+    if (rev === "yes") res = res.filter(e => e.reviewed === true);
+    else if (rev === "no") res = res.filter(e => e.reviewed === false);
+
+    return res;
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Hash routing for deep links (#event=<id>)
+  // ─────────────────────────────────────────────────────
+  function setHashForEvent(eventId) {
+    if (!eventId) return;
+    const params = new URLSearchParams();
+    params.set("event", eventId);
+    window.location.hash = params.toString();
+  }
+
+  function getHashEventId() {
+    const h = window.location.hash.replace(/^#/, "");
+    if (!h) return null;
+    const p = new URLSearchParams(h);
+    return p.get("event");
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Player screen open/close + navigation
+  // ─────────────────────────────────────────────────────
+  function destroyPlayerHls() {
+    if (currentPlayerHls) {
+      try { currentPlayerHls.destroy(); } catch(e) {}
+      currentPlayerHls = null;
+    }
+  }
+
+  function closePlayerScreen(clearHash = true) {
+    destroyPlayerHls();
+    playerVideoEl.onplay = null;
+    playerVideoEl.pause();
+    playerVideoEl.removeAttribute("src");
+    playerVideoEl.load();
+
+    playerScreen.classList.remove("show");
+    playerScreen.setAttribute("aria-hidden", "true");
+
+    if (clearHash) {
+      history.pushState("", document.title, window.location.pathname + window.location.search);
+    }
+  }
+
+  function getFilteredListForNav() {
+    return applyFilters(lastEvents);
+  }
+
+  function openPlayerForEventId(eventId) {
+    const list = getFilteredListForNav();
+    const idx = list.findIndex(e => String(e.id) === String(eventId));
+    if (idx === -1) {
+      console.warn("Event not found in current filtered set:", eventId);
+      return;
+    }
+
+    const ev = list[idx];
+    const src = normalizeVideoUrl(ev.vodPath);
+    const mp4Url = buildMp4ClipUrl(ev);
+
+    playerDownloadBtn.onclick = () => {
+      const a = document.createElement("a");
+      a.href = mp4Url;
+      a.download = `${ev.id || "frigate"}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
+
+    playerTitleEl.textContent = ev.title || "Event";
+    playerMetaLeft.textContent = `${ev.camera || ""}`.trim();
+    playerMetaRight.textContent = `${ev.eventSeverity || ""}${ev.eventSeverity ? " • " : ""}${ev.time || ""}`.trim();
+
+    playerScreen.classList.add("show");
+    playerScreen.setAttribute("aria-hidden", "false");
+
+    playerTodayBtn.style.display = (logDateInput.value === getTodayString()) ? "none" : "inline-flex";
+
+    playerPrevBtn.disabled = idx <= 0;
+    playerNextBtn.disabled = idx >= list.length - 1;
+
+    playerPrevBtn.onclick = () => { if (idx > 0) setHashForEvent(list[idx - 1].id); };
+    playerNextBtn.onclick = () => { if (idx < list.length - 1) setHashForEvent(list[idx + 1].id); };
+
+    destroyPlayerHls();
+
+    if (playerVideoEl.canPlayType("application/vnd.apple.mpegurl")) {
+      playerVideoEl.src = src;
+    } else if (window.Hls && window.Hls.isSupported()) {
+      currentPlayerHls = new Hls();
+      currentPlayerHls.loadSource(src);
+      currentPlayerHls.attachMedia(playerVideoEl);
+    } else {
+      playerVideoEl.src = src;
+    }
+
+    playerVideoEl.onplay = async () => {
+      try {
+        if (!ev.reviewed && ev.id) {
+          ev.reviewed = true;
+          const global = lastEvents.find(x => String(x.id) === String(ev.id));
+          if (global) global.reviewed = true;
+          renderPage();
+          await markReviewed(ev.id);
+        }
+      } catch (err) {
+        console.error("Auto-mark reviewed failed", err);
+      }
+    };
+
+    playerVideoEl.play().catch(()=>{});
+  }
+
+  function handleHashRoute() {
+    const eventId = getHashEventId();
+    if (!eventId) {
+      if (playerScreen.classList.contains("show")) closePlayerScreen(false);
+      return;
+    }
+    openPlayerForEventId(eventId);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Rendering
+  // ─────────────────────────────────────────────────────
+  function renderCards(events) {
+    eventsContainer.innerHTML = "";
+    emptyMessage.textContent = "";
+
+    if (!events.length) {
+      emptyMessage.textContent = "No events found.";
+      return;
+    }
+
+    for (const ev of events) {
+      const card = document.createElement("div");
+      card.className = "card";
+
+      let threatClass = "threat-low";
+      if (ev.threat >= 2) threatClass = "threat-high";
+      else if (ev.threat === 1) threatClass = "threat-med";
+
+      const thumbInner = ev.thumbUrl
+        ? `<img src="${ev.thumbUrl}" alt="">`
+        : "";
+
+      const cameraOverlay = ev.camera
+        ? `<div class="thumb-camera-chip">${ev.camera}</div>`
+        : "";
+
+      const metaLabel = `${ev.eventSeverity || ""}${ev.eventSeverity ? " • " : ""}${ev.time || ""}`.trim();
+      const reviewedIcon = ev.reviewed ? '<span class="reviewed-check">✓</span>' : "";
+      const metaOverlay = metaLabel
+        ? `<div class="thumb-meta-chip" data-event-id="${ev.id || ""}">
+             ${reviewedIcon}
+             <span>${metaLabel}</span>
+           </div>`
+        : "";
+
+      const thumbBlock = thumbInner.trim()
+        ? `<div class="thumb-wrapper ${threatClass}" data-event-id="${ev.id || ""}">
+             ${thumbInner}
+             ${cameraOverlay}
+             ${metaOverlay}
+           </div>`
+        : "";
+
+      card.innerHTML = `
+        ${thumbBlock}
+        <div class="title">${ev.title}</div>
+        <div class="scene">${ev.scene || ""}</div>
+      `;
+
+      const titleEl = card.querySelector(".title");
+      const sceneEl = card.querySelector(".scene");
+      if (titleEl && sceneEl) {
+        titleEl.classList.add("title-toggle");
+        sceneEl.classList.add("collapsed");
+        titleEl.addEventListener("click", () => {
+          sceneEl.classList.toggle("collapsed");
+        });
+      }
+
+      const thumb = card.querySelector(".thumb-wrapper[data-event-id]");
+      if (thumb && ev.id) {
+        thumb.addEventListener("click", (e) => {
+          if (e.target.closest(".thumb-meta-chip")) return;
+          setHashForEvent(ev.id);
+        });
+      }
+
+      const metaChip = card.querySelector(".thumb-meta-chip[data-event-id]");
+      if (metaChip && ev.id) {
+        metaChip.addEventListener("click", async (clickEvt) => {
+          clickEvt.stopPropagation();
+          clickEvt.preventDefault();
+
+          const wasReviewed = !!ev.reviewed;
+
+          ev.reviewed = true;
+          const global = lastEvents.find(x => String(x.id) === String(ev.id));
+          if (global) global.reviewed = true;
+          renderPage();
+
+          try {
+            await markReviewed(ev.id);
+          } catch (err) {
+            console.error("Failed to mark reviewed", err);
+            if (!wasReviewed) {
+              ev.reviewed = false;
+              if (global) global.reviewed = false;
+              renderPage();
+            }
+          }
+        });
+      }
+
+      eventsContainer.appendChild(card);
+    }
+
+    applyGridColumns();
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Pagination
+  // ─────────────────────────────────────────────────────
+  function renderPage() {
+    const filtered = applyFilters(lastEvents);
+    const total = filtered.length;
+
+    if (!total) {
+      renderCards([]);
+      pageInfoSpan.textContent = "No results";
+      prevPageBtn.disabled = true;
+      nextPageBtn.disabled = true;
+      return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const startIndex = (currentPage - 1) * pageSize;
+    const pageEvents = filtered.slice(startIndex, startIndex + pageSize);
+
+    renderCards(pageEvents);
+
+    pageInfoSpan.textContent = `Page ${currentPage} of ${totalPages}`;
+    prevPageBtn.disabled = currentPage <= 1;
+    nextPageBtn.disabled = currentPage >= totalPages;
+
+    handleHashRoute();
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Main load
+  // ─────────────────────────────────────────────────────
+  async function loadLog() {
+    try {
+      apiStatusEl.textContent = "API: loading…";
+      apiStatusEl.classList.remove("ok", "err");
+
+      const dateVal = logDateInput.value || getTodayString();
+      const dayEvents = await loadFromReviewApi(dateVal);
+
+      lastEvents = dayEvents;
+      currentPage = 1;
+
+      updateCameraOptions(dayEvents);
+      updateSeverityOptions(dayEvents);
+      updateObjectsOptions(dayEvents);
+
+      renderPage();
+    } catch (err) {
+      console.error(err);
+      setApiStatus(false, err.message);
+      emptyMessage.textContent = "Failed to load events: " + err.message;
+      eventsContainer.innerHTML = "";
+      pageInfoSpan.textContent = "";
+      prevPageBtn.disabled = true;
+      nextPageBtn.disabled = true;
+      closePlayerScreen(false);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Init + bindings
+  // ─────────────────────────────────────────────────────
+  function onDateChanged() {
+    currentPage = 1;
+    updateDayNavVisibility();
+    loadLog();
+  }
+
+  logDateInput.addEventListener("change", onDateChanged);
+
+  prevDayBtn.addEventListener("click", () => changeDayBy(-1));
+  nextDayBtn.addEventListener("click", () => changeDayBy(1));
+  todayBtn.addEventListener("click", () => {
+    logDateInput.value = getTodayString();
+    currentPage = 1;
+    updateDayNavVisibility();
+    loadLog();
+  });
+
+  playerBackBtn.addEventListener("click", () => {
+    closePlayerScreen(true);
+  });
+
+  playerTodayBtn.addEventListener("click", () => {
+    logDateInput.value = getTodayString();
+    currentPage = 1;
+    updateDayNavVisibility();
+    loadLog();
+    closePlayerScreen(true);
+  });
+
+  cameraFilter.addEventListener("change", () => { currentPage = 1; renderPage(); });
+  threatFilter.addEventListener("change", () => { currentPage = 1; renderPage(); });
+  eventSeverityFilter.addEventListener("change", () => { currentPage = 1; renderPage(); });
+  objectsFilter.addEventListener("change", () => { currentPage = 1; renderPage(); });
+  reviewedFilter.addEventListener("change", () => { currentPage = 1; renderPage(); });
+
+  pageSizeSelect.addEventListener("change", () => {
+    pageSize = parseInt(pageSizeSelect.value, 10) || 12;
+    currentPage = 1;
+    renderPage();
+  });
+
+  columnsSelect.addEventListener("change", () => {
+    gridColumns = parseInt(columnsSelect.value, 10) || 0;
+    applyGridColumns();
+  });
+
+  vodHostSelect.addEventListener("change", () => {
+    setSelectedVodServer(vodHostSelect.value || "secondary");
+    handleHashRoute();
+  });
+
+  // NEW: player view server selector (default secondary, stays in sync)
+  playerVodHostSelect.addEventListener("change", () => {
+    setSelectedVodServer(playerVodHostSelect.value || "secondary");
+    handleHashRoute(); // reload current event stream from chosen server
+  });
+
+  prevPageBtn.addEventListener("click", () => {
+    if (currentPage > 1) { currentPage--; renderPage(); }
+  });
+
+  nextPageBtn.addEventListener("click", () => {
+    currentPage++; renderPage();
+  });
+
+  toggleFiltersBtn.addEventListener("click", toggleFilters);
+
+  window.addEventListener("resize", () => {
+    const isMobile = window.innerWidth <= 900;
+    if (!isMobile) {
+      advancedFilters.classList.remove("collapsed");
+      toggleFiltersBtn.textContent = "Filters ▴";
+    }
+  });
+
+  window.addEventListener("hashchange", () => {
+    handleHashRoute();
+  });
+
+  window.addEventListener("DOMContentLoaded", () => {
+    const qs = new URLSearchParams(window.location.search);
+    const qsDate = qs.get("date");
+    logDateInput.value = qsDate || getTodayString();
+
+    initVodHostSelect();
+    initFiltersPanel();
+    initGridColumns();
+    updateDayNavVisibility();
+
+    // keep player selector in sync with default
+    if (playerVodHostSelect) playerVodHostSelect.value = selectedVodServer;
+
+    closePlayerScreen(false);
+    loadLog();
+  });
+</script>
+</body>
+</html>
